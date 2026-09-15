@@ -217,14 +217,15 @@ async function importApkg(file){const zip=await JSZip.loadAsync(file);
     scan('models').concat(scan('notetypes')).forEach(m=>{if(m.flds)models[m.id]=m});
     scan('decks').forEach(d=>{if(d.id!=null)decks[d.id]=d});
   }else{
+    const norm=o=>Array.isArray(o)?o:Object.values(o||{});
     const c=db.exec('SELECT models,decks FROM col')[0].values[0];
-    JSON.parse(c[0]).forEach(m=>models[m.id]=m);
-    JSON.parse(c[1]).forEach(d=>decks[d.id]=d)}
+    norm(JSON.parse(c[0])).forEach(m=>models[m.id]=m);
+    norm(JSON.parse(c[1])).forEach(d=>decks[d.id]=d)}
   const q=db.exec('SELECT id,mid,flds FROM notes');
   const deckOf={};
   try{db.exec('SELECT nid,did FROM cards')[0].values.forEach(([nid,did])=>{if(!(nid in deckOf))deckOf[nid]=did})}catch(e){}
   const out=[];
-  for(const[id,mid,flds]of q[0].values){
+  for(const[id,mid,flds]of (q[0]?.values||[])){
     const m=models[mid];if(!m)continue;
     const vals=String(flds).split('\x1f').map(clean);
     const names=m.flds.map(f=>f.name.toLowerCase());
