@@ -145,14 +145,44 @@ let progress=load(LS.p,{});
 let settings=load(LS.s,null);
 let presets=load(LS.pr,{});
 let counts=load(LS.c,{d:'',n:0,r:0});
-let notes=[];            // {id,deck,hanzi,pinyin,meaning,sound,deckId}
+let notes=[];            // {id,deck,hanzi,pinyin,meaning,sound,img,deckId}
 let mediaMap={};         // filename -> blobURL (per import)
+let mediaBlobs={};       // filename -> Blob (for IndexedDB persistence)
 let decksOn={};          // deckId -> bool
 let cur=null,stage=0,answerGiven='',timerInt=null,t0=0;
 
 const DEF={newday:9999,maxrev:9999,steps:'5s 50s 2m',relearn:'5s 50s 2m',leech:6,leechact:'Suspend Card',
 noautoplay:false,waitaudio:false,maxsec:60,newsrt:'Random',revsrt:'Due date, then random',newafter:true,ret:90,maxivl:36500,testmode:false};
 if(!settings){settings={...DEF};presets={'Default':{...DEF}};save(LS.pr,presets);save(LS.s,settings);}
+
+/* ---------- IndexedDB persistence (local, like Anki's col.db) ---------- */
+let idbP=null;
+function idb(){if(!idbP)idbP=new Promise((res,rej)=>{
+  const r=indexedDB.open('ast-store',1);
+  r.onupgradeneeded=()=>{const d=r.result;
+    if(!d.objectStoreNames.contains('notes'))d.createObjectStore('notes');
+    if(!d.objectStoreNames.contains('media'))d.createObjectStore('media')};
+  r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
+  return idbP}
+async function saveAll(){try{
+  if(typeof navigator!=='undefined'&&navigator.storage&&navigator.storage.persist)navigator.storage.persist();
+  const db=await idb();
+  await new Promise((res,rej)=>{const t=db.transaction('notes','readwrite');const s=t.objectStore('notes');
+    s.clear();s.put(notes,'all');t.oncomplete=()=>res();t.onerror=()=>rej(t.error)});
+  await new Promise((res,rej)=>{const t=db.transaction('media','readwrite');const s=t.objectStore('media');s.clear();
+    for(const[name,blob]of Object.entries(mediaBlobs))s.put(blob,name);
+    t.oncomplete=()=>res();t.onerror=()=>rej(t.error)})}catch(e){}}
+async function loadStored(){try{const db=await idb();
+  const arr=await new Promise((res,rej)=>{const t=db.transaction('notes','readonly');
+    const r=t.objectStore('notes').get('all');r.onsuccess=()=>res(r.result||[]);r.onerror=()=>rej(r.error)});
+  if(!arr.length)return false;
+  notes=arr;
+  await new Promise(res=>{const t=db.transaction('media','readonly');
+    const rq=t.objectStore('media').openCursor();
+    rq.onsuccess=()=>{const c=rq.result;if(c){mediaMap[String(c.key).toLowerCase()]=URL.createObjectURL(c.value);c.continue()}else res()};
+    rq.onerror=()=>res()});
+  notes.forEach(n=>{if(!(n.deckId in decksOn))decksOn[n.deckId]=true});
+  return true}catch(e){return false}}
 
 /* ---------- helpers ---------- */
 const $=id=>document.getElementById(id);
@@ -212,7 +242,8 @@ async function importApkg(file,onProg){const zip=await JSZip.loadAsync(file);
       const ext=((fname.match(/\.([a-z0-9]+)$/i))||[])[1]||'mp3';
       const MIME={mp3:'audio/mpeg',m4a:'audio/mp4',m4b:'audio/mp4',mp4:'audio/mp4',aac:'audio/aac',ogg:'audio/ogg',oga:'audio/ogg',opus:'audio/ogg',wav:'audio/wav',flac:'audio/flac',webm:'audio/webm',
         jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',gif:'image/gif',webp:'image/webp',svg:'image/svg+xml',bmp:'image/bmp',avif:'image/avif'};
-      mediaMap[String(fname).toLowerCase()]=URL.createObjectURL(new Blob([buf],{type:MIME[String(ext).toLowerCase()]||'application/octet-stream'}))}catch(e){}
+      mediaMap[String(fname).toLowerCase()]=URL.createObjectURL(new Blob([buf],{type:MIME[String(ext).toLowerCase()]||'application/octet-stream'}));
+      mediaBlobs[String(fname).toLowerCase()]=new Blob([buf],{type:MIME[String(ext).toLowerCase()]||'application/octet-stream'})}catch(e){}
     if(++mi%25===0&&onProg)onProg(`extracting media ${mi}/${entries.length}`)}
   const dbFile=zip.file('collection.anki21')||zip.file('collection.anki21b')||zip.file('collection.anki23')||zip.file('collection.anki2');
   if(!dbFile){const names=Object.keys(zip.files).slice(0,10).join(', ');
@@ -381,6 +412,8 @@ function showGrade(known){stage=2;stopTimer();
     btn('Good','g-good',()=>finish(2),'3'),
     btn('Easy','g-easy',()=>finish(3),'4'))}
 function finish(action){grade(action);queue.shift();stage=0;
+  const extra=liveNotes().filter(n=>isDue(n.id)&&!queue.includes(n)).slice(0,50);
+  queue.unshift(...extra);
   if(!queue.length){idler();return}cur=queue[0];
   if(settings.testmode){showTestQ();return}
   const isNew=!progress[cur.id]||progress[cur.id].state==='new';
@@ -456,6 +489,7 @@ async function importFiles(files){const status=[];
   }catch(err){status.push(`❌ ${f.name}: ${err.message}`)}}
   $('import-status').innerHTML=status.join('<br>');
   renderDeckbar();statsView();
+  await saveAll();
   if(notes.length)idler();
   else{$('stage-lbl').textContent='no decks loaded'}}
 $('file-in').onchange=e=>{const files=[...e.target.files];e.target.value='';importFiles(files)};
@@ -488,7 +522,9 @@ window.addEventListener('load',async()=>{speechSynthesis.onvoiceschanged=()=>pic
   try{await getSQL()}catch(e){}
   $('boot').style.display='none';
   $('test-btn').textContent='🧪 Test mode: '+(settings.testmode?'ON':'off');
-  loadBuild();setInterval(renderBuild,30000);statsView()});
+  loadBuild();setInterval(renderBuild,30000);statsView();
+  const restored=await loadStored();
+  if(restored){renderDeckbar();statsView();idler()}});
 document.addEventListener('click',function prime(){document.removeEventListener('click',arguments.callee);
   try{const u=new SpeechSynthesisUtterance(' ');u.volume=0;speechSynthesis.speak(u)}catch(e){}},{once:true});
 </script>
