@@ -443,11 +443,12 @@ function renderHome(){const ids=[...new Set(notes.map(n=>n.deckId))];
     const desc=first.desc?`<div class="ddesc">${esc(String(first.desc).replace(/<[^>]*>/g,' ').slice(0,140))}</div>`:'';
     const lang=first.lang==='zh'?'<span class="langtag">🇨🇳 Mandarin</span>':'';
     const card=document.createElement('div');card.className='deckcard';
+    const bundled=String(d)==='mz';
     card.innerHTML=`<h3>${name} ${lang}</h3>
       <div class="dmeta">${ns.length} cards · <b>${newC}</b> new · ${learnC} learning · <b>${revC}</b> reviewing${doneC?` · ${doneC} done`:''}<br>
       ${dueC?`<b>${dueC} ready now</b> · `:''}${sentC} sentence(s) unlocked</div>${desc}
       <div class="dbtns"><button class="dreset" data-r="${esc(String(d))}">♻ reset</button>
-      <button class="dreset dx" data-x="${esc(String(d))}" data-n="${esc(first.deck||String(d))}">🗑 remove</button></div>`;
+      ${bundled?'':`<button class="dreset dx" data-x="${esc(String(d))}" data-n="${esc(first.deck||String(d))}">🗑 remove</button>`}</div>`;
     card.onclick=e=>{if(e.target.closest('.dreset'))return;startDeck(d)};
     g.appendChild(card)}
   const soon=document.createElement('div');soon.className='deckcard soon';
@@ -467,7 +468,7 @@ function removeDeck(d,dname){const ns=notes.filter(n=>n.deckId===d);
 function resetDeck(d){const ns=notes.filter(n=>n.deckId===d);
   if(!confirm(`Reset ALL progress for "${d}" (${ns.length} cards)? Lessons start over.`))return;
   for(const n of ns){delete progress[n.id];delete progress['S'+n.id]}
-  counts.n[d]=0;counts.r[d]=0;persist();renderHome()}
+  counts.n[d]=0;counts.r[d]=0;persist();saveAll();sentSeen.clear();renderHome()}
 let queue=[];
 
 function renderDeckbar(){const ids=[...new Set(notes.map(n=>n.deckId))];
@@ -677,7 +678,7 @@ function closeSettings(){readSettings();statsView();$('settings-modal').classLis
 
 /* ---------- build info ---------- */
 let lastCommit=null;
-const BUILD_DATE=1789438002;
+const BUILD_DATE=1789439836;
 function relTime(t){const s=(Date.now()-t)/1000;
   if(s<60)return Math.max(0,Math.floor(s))+'s ago';
   if(s<3600)return Math.floor(s/60)+'m ago';
