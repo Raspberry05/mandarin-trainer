@@ -19,6 +19,8 @@ main{max-width:760px;margin:0 auto;padding:20px 16px 80px}
 #build-info{font-size:12px;margin-bottom:14px;color:var(--dim)}
 #build-info b{color:var(--fg)}
 #build-info a{color:var(--acc);text-decoration:none}
+#drop-overlay{position:fixed;inset:0;background:rgba(17,20,24,.88);border:3px dashed var(--acc);border-radius:16px;margin:12px;display:none;align-items:center;justify-content:center;z-index:50;font-size:22px;color:var(--acc);pointer-events:none}
+#drop-overlay.show{display:flex}
 .stats{display:flex;gap:14px;color:var(--dim);font-size:13px;margin-bottom:14px}
 .stats b{color:var(--fg)}
 #deckbar{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
@@ -72,10 +74,11 @@ footer{position:fixed;bottom:0;left:0;right:0;background:var(--panel);border-top
 <span>Leeched: <b id="st-leech">0</b></span>
 </div>
 <div id="deckbar"></div>
+<div id="drop-overlay">📦 drop .apkg / .txt / .csv here</div>
 <div id="import-status" class="hint" style="margin-bottom:12px"></div>
 <div id="cardbox">
 <div class="stage" id="stage-lbl">no decks loaded</div>
-<div class="prompt" id="prompt">Import your Anki deck (<b>.apkg</b>) or a <b>TSV</b> (hanzi&nbsp;&lt;tab&gt;&nbsp;pinyin&nbsp;&lt;tab&gt;&nbsp;meaning).<br><br><span class="hint">From Anki: File → Export → Apkg. Or Notes as text.</span></div>
+<div class="prompt" id="prompt">Import your Anki deck (<b>.apkg</b>) or a <b>TSV</b> (hanzi&nbsp;&lt;tab&gt;&nbsp;pinyin&nbsp;&lt;tab&gt;&nbsp;meaning).<br><br><b>Drag &amp; drop</b> the file anywhere on this page — or use the button.<br><br><span class="hint">From Anki: File → Export → Apkg. Or Notes as text.</span></div>
 <div class="btnrow" id="actions"></div>
 <div id="feedback"></div>
 <div id="timer"></div>
@@ -442,8 +445,12 @@ async function importFiles(files){const status=[];
   if(notes.length)idler();
   else{$('stage-lbl').textContent='no decks loaded'}}
 $('file-in').onchange=e=>{const files=[...e.target.files];e.target.value='';importFiles(files)};
-document.addEventListener('dragover',e=>{e.preventDefault()});
-document.addEventListener('drop',e=>{e.preventDefault();if(e.dataTransfer?.files?.length)importFiles([...e.dataTransfer.files])});
+let dragDepth=0;
+window.addEventListener('dragenter',e=>{e.preventDefault();dragDepth++;$('drop-overlay').classList.add('show')});
+window.addEventListener('dragover',e=>{e.preventDefault()});
+window.addEventListener('dragleave',e=>{dragDepth--;if(dragDepth<=0){dragDepth=0;$('drop-overlay').classList.remove('show')}});
+window.addEventListener('drop',e=>{e.preventDefault();dragDepth=0;$('drop-overlay').classList.remove('show');
+  if(e.dataTransfer?.files?.length)importFiles([...e.dataTransfer.files])});
 $('settings-btn').onclick=openSettings;
 $('settings-close').onclick=closeSettings;
 $('deck-close').onclick=()=>$('deck-modal').classList.remove('open');
