@@ -388,9 +388,13 @@ function idler(){queue=buildQueue();if(!queue.length){
     setPrompt('<span class="hint">No cards due. Come back later or import more. 🎉</span>');
     setActions(btn('🔄 Rebuild queue',null,idler));
     cur=null;statsView();return}
-  cur=queue[0];
+  route()}
+function route(){const e=queue[0];
+  if(e&&e.sentNote){cur=e.sentNote;showSentQ(null);return}
+  cur=e;
   const isNew=!progress[cur.id]||progress[cur.id].state==='new';
-  isNew?showListen():showWordTest()}
+  if(isNew){(cur.sHz||cur.sMean)?showSentIntro():showListen();return}
+  showWordTest()}
 function fullView(note){const iu=note.img&&mediaMap[String(note.img).toLowerCase()];
   return `<div class="py">${esc(note.pinyin)||'<span class="hint">(no pinyin)</span>'}</div>
     <div class="hz">${esc(note.hanzi)}</div>
@@ -402,59 +406,76 @@ function sentView(note){const su=note.sSound&&soundUrl({sound:note.sSound});
     <div class="hz" style="font-size:30px">${esc(note.sHz)}</div>
     <div class="py" style="font-size:22px">${esc(note.sPy)}</div>
     <div class="meaning">${esc(note.sMean)}</div>
-    ${su?'':'<div class="hint">⚠ no sentence audio — TTS</div>'}`}
+    ${su?'':'<div class="hint">⚠ no sentence audio — TTS</div>'}'}
 function audioWarn(){return (cur.sound&&!soundUrl(cur))?'<div class="hint">⚠ deck audio missing — TTS voice</div>':''}
 function playSent(){const m=cur.sSound&&soundUrl({sound:cur.sSound});
   if(m){new Audio(m).play().catch(()=>tts(cur.sHz))}else tts(cur.sHz||cur.hanzi)}
-function showListen(){stage=0;$('stage-lbl').textContent=`lesson — ${cur.deck}`;
-  const sent=cur.sMean||cur.sHz;
-  setPrompt((sent?`<div class="hint">goal — you'll learn to say this:</div>
-    <div class="hz" style="font-size:26px">${esc(cur.sHz)}</div>
+function sentReady(n){if(!(n.sHz||n.sMean))return false;
+  const s=n.sHz||n.sMean;const seen=new Set();
+  for(const m of notes){if(m.id===n.id||!m.hanzi||seen.has(m.hanzi))continue;
+    seen.add(m.hanzi);
+    if(s.includes(m.hanzi)&&!progress[m.id])return false}
+  return true}
+function showSentIntro(){stage=0;$('stage-lbl').textContent=`lesson — ${cur.deck}`;
+  setPrompt(`<div class="hint">today you'll learn to say:</div>
+    <div class="hz" style="font-size:34px">${esc(cur.sHz)}</div>
+    <div class="py" style="font-size:26px">${esc(cur.sPy)}</div>
     <div class="meaning">${esc(cur.sMean)}</div>
-    <div class="hint">🔊 listen to the whole sentence first (button below)</div><hr style="border-color:#242b34;width:100%">`
-    :'')+
-    fullView(cur)+audioWarn()+`<div class="hint">break it down: 🔊 + pinyin + hanzi + meaning</div>`);
+    ${cur.img&&mediaMap[String(cur.img).toLowerCase()]?`<img class="note-img" src="${mediaMap[String(cur.img).toLowerCase()]}" alt="">`:''}
+    <div class="hint">🔊 just listen for now. then we break it down word by word.</div>`);
+  $('feedback').textContent='';$('feedback').className='';
+  if(!settings.noautoplay)playSent();
+  setActions(btn('🔊 Replay sentence',null,playSent,'space'),
+    btn('Break it down →','primary',showListen,'enter'))}
+function showListen(){stage=1;$('stage-lbl').textContent=`word — ${cur.deck}`;
+  setPrompt(fullView(cur)+audioWarn()+`<div class="hint">a piece of your sentence: 🔊 + pinyin + hanzi + meaning</div>`);
   $('feedback').textContent='';$('feedback').className='';
   if(!settings.noautoplay)playAudio(cur);
-  setActions(...[btn('🔊 Word',null,()=>playAudio(cur),'space'),
-    sent?btn('🔊 Sentence',null,playSent):null,
-    btn('Test me →','primary',showWordTest,'enter')].filter(Boolean))}
-function showWordTest(){stage=1;$('stage-lbl').textContent='test — how do you say it?';
+  setActions(btn('🔊 Word',null,()=>playAudio(cur),'space'),
+    btn('Test me →','primary',showWordTest,'enter'))}
+function showWordTest(){stage=2;$('stage-lbl').textContent='test — how do you say it?';
   setPrompt(`<div class="hint">how do you say this in Mandarin?</div>
     <div class="meaning" style="font-size:28px;color:#e8edf3">${esc(cur.meaning)}</div>
     <div class="hint">say it aloud — then judge yourself. no hints.</div>`);
   $('feedback').textContent='';$('feedback').className='';
   setActions(btn('✅ I know it','g-next',()=>testReveal(true),'enter'),
     btn('❌ I don\'t know','g-again',()=>testReveal(false)))}
-function testReveal(known){stage=2;
-  const sent=cur.sMean||cur.sHz;
+function testReveal(known){stage=3;
   setPrompt(fullView(cur)+audioWarn()+
     (known?'<div class="hint">knew it — graded Good, next review pushed out</div>'
           :'<div class="hint">didn\'t know — graded Again, repeats soon</div>'));
   playAudio(cur);
+  const ready=sentReady(cur);
   setActions(...[btn('🔊 Replay',null,()=>playAudio(cur),'space'),
-    sent?btn('🗣️ Sentence practice →','g-hard',()=>showSentQ(known)):null,
+    ready?btn('🗣️ Practice the sentence →','g-hard',()=>showSentQ(known)):null,
     btn('Continue →','primary',()=>finish(known?2:0),'enter')].filter(Boolean))}
-function showSentQ(known){stage=3;$('stage-lbl').textContent='sentence practice';
-  setPrompt(`<div class="hint">now build the sentence — how do you say:</div>
-    <div class="meaning" style="font-size:26px;color:#e8edf3">${esc(cur.sMean||'')}</div>
-    <div class="hint">you know the parts. say the whole sentence aloud.</div>`);
+function showSentQ(known){stage=5;$('stage-lbl').textContent=known==null?'sentence practice':'sentence — put it together';
+  setPrompt(`<div class="hint">how do you say this sentence?</div>
+    <div class="meaning" style="font-size:27px;color:#e8edf3">${esc(cur.sMean||cur.sHz)}</div>
+    <div class="hint">you know every word in it. say the whole sentence aloud.</div>`);
   $('feedback').textContent='';$('feedback').className='';
   setActions(btn('✅ I said it','g-next',()=>showSentR(known),'enter'),
     btn('👀 Show me','g-hard',()=>showSentR(known)))}
-function showSentR(known){stage=4;
+function showSentR(known){stage=6;
   setPrompt(sentView(cur)+
-    (known?'<div class="hint">nice — word graded Good either way</div>'
-          :'<div class="hint">sentence is practice — only the word test grades</div>'));
+    (known==null?'<div class="hint">practice — comes back with reviews</div>'
+      :(known?'<div class="hint">nice — word graded Good</div>'
+             :'<div class="hint">practice only — the word test decides your grade</div>')));
   playSent();
   setActions(btn('🔊 Replay',null,playSent,'space'),
-    btn('Continue →','primary',()=>finish(known?2:0),'enter'))}
-function finish(action){grade(action);queue.shift();stage=0;
+    known==null?btn('Next →','primary',advance,'enter')
+               :btn('Continue →','primary',()=>finish(known?2:0),'enter'))}
+function finish(action){grade(action);
+  const p=progress[cur.id];
+  if(p&&p.state==='review'&&!p.sentDone&&sentReady(cur)){
+    p.sentDone=true;persist();
+    queue.splice(Math.min(3,queue.length),0,{sentNote:cur})}
+  queue.shift();stage=0;
   const extra=liveNotes().filter(n=>isDue(n.id)&&!queue.includes(n)).slice(0,50);
   queue.unshift(...extra);
-  if(!queue.length){idler();return}cur=queue[0];
-  const isNew=!progress[cur.id]||progress[cur.id].state==='new';
-  isNew?showListen():showWordTest()}
+  if(!queue.length){idler();return}route()}
+function advance(){queue.shift();stage=0;
+  if(!queue.length){idler();return}route()}
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 
 /* ---------- settings UI ---------- */
