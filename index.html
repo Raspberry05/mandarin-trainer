@@ -53,6 +53,12 @@ main{max-width:1360px;margin:0 auto;padding:24px 20px 90px}
 #curriculum .les.done{color:var(--ok)}
 #curriculum .les.cur{color:var(--acc);background:rgba(90,169,255,.1);font-weight:600}
 #curriculum .les.lock{opacity:.45}
+#curriculum .lvl{margin:10px 0 4px;display:flex;justify-content:space-between;gap:8px;
+  font-size:11.5px;font-weight:700;color:var(--fg);text-transform:uppercase;letter-spacing:.08em;
+  border-top:1px solid var(--bd);padding-top:9px}
+#curriculum .lvl:first-of-type{border-top:none;margin-top:0;padding-top:0}
+#curriculum .lvl .lvl-c{color:var(--dim);font-weight:400}
+#curriculum .lvl.done{color:var(--ok)}
 .stage{color:var(--acc);font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;background:rgba(90,169,255,.08);border:1px solid rgba(90,169,255,.2);border-radius:20px;padding:5px 14px}
 .prompt{font-size:22px}
 .py{font-size:42px;font-weight:650;letter-spacing:.02em;color:var(--acc)}
@@ -300,6 +306,8 @@ function statsView(){rollCounts();
   renderRail()}
 function lessons(){return liveNotes().filter(n=>sHzHas(n))
   .sort((a,b)=>(a.k||0)-(b.k||0)||(a.id<b.id?-1:1))}
+function hskLevel(n){const k=n.k||0;return k<=150?1:k<=300?2:k<=600?3:k<=1200?4:k<=2500?5:6}
+function levelComplete(lvl){return lessons().filter(n=>hskLevel(n)===lvl).every(n=>progress['S'+n.id])}
 function renderRail(){const all=lessons();const cur=activeNote();
   const curIdx=cur?all.indexOf(cur):all.length;
   const done=all.filter(n=>progress['S'+n.id]||sentComplete(n)).length;
@@ -307,7 +315,14 @@ function renderRail(){const all=lessons();const cur=activeNote();
   $('rail-lbl').textContent=all.length?done+' / '+all.length+' ('+Math.round(done/all.length*100)+'%)':'';
   const c=$('curriculum');if(!c)return;
   c.innerHTML=`<h3>curriculum — lesson ${Math.min(curIdx+1,all.length)} of ${all.length}</h3>`;
-  all.forEach((n,i)=>{const d=document.createElement('div');
+  let lvl=0;
+  all.forEach((n,i)=>{const L=hskLevel(n);
+    if(L!==lvl){lvl=L;const lg=all.filter(m=>hskLevel(m)===L);
+      const dn=lg.filter(m=>progress['S'+m.id]).length;
+      const h=document.createElement('div');h.className='lvl'+(dn===lg.length?' done':'');
+      h.innerHTML=`HSK ${L} <span class="lvl-c">${dn}/${lg.length}${dn===lg.length?' ✓':''}</span>`;
+      c.appendChild(h)}
+    const d=document.createElement('div');
     d.className='les '+(progress['S'+n.id]?'done':(n===cur?'cur':(i<curIdx?'done':'lock')))
       +((i<=curIdx)?' click':'');
     d.textContent=(progress['S'+n.id]?'✓ ':(n===cur?'▶ ':'🔒 '))+(i+1)+'. '+(n.sMean||n.sHz);
@@ -697,7 +712,10 @@ function gradeSent(a){ // Again Hard Good Easy = 0 1 2 3
   const id='S'+cur.id;
   const existed=!!progress[id];
   const p=progress[id]||(progress[id]={state:'review',step:0,due:0,ivl:2,ease:2.5});
-  if(a!==0&&!existed){counts.s=counts.s||{};const dk=studyDeck||cur.deckId;counts.s[dk]=(counts.s[dk]||0)+1}
+  if(a!==0&&!existed){counts.s=counts.s||{};const dk=studyDeck||cur.deckId;counts.s[dk]=(counts.s[dk]||0)+1;
+    const lvl=hskLevel(cur);
+    if(levelComplete(lvl)&&!sessionStorage.getItem('hskc'+lvl)){sessionStorage.setItem('hskc'+lvl,'1');
+      setTimeout(()=>alert(`🎉 Congratulations — HSK ${lvl} complete! Every sentence in this level is learned.`),600)}}
   if(a===0){p.ivl=Math.max(1,Math.round(p.ivl*0.4));p.ease=Math.max(1.3,(p.ease||2.5)-0.2);p.due=Date.now()+5*60e3}
   else{if(a===1){p.ease=Math.max(1.3,(p.ease||2.5)-0.15);p.ivl=Math.max(1,Math.round(p.ivl*1.2))}
     else if(a===2){p.ivl=Math.max(1,Math.round(p.ivl*(p.ease||2.5)))}
