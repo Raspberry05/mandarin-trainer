@@ -532,7 +532,49 @@ function showHome(){view='home';$('home-view').style.display='';$('study-view').
   $('back-btn').style.display='none';$('reset-card-btn').style.display='none';renderHome()}
 function startDeck(d){view='study';studyDeck=d;decksOn={};decksOn[d]=true;saveSettings();sentSeen.clear();
   renderDeckbar();$('home-view').style.display='none';$('study-view').style.display='';
-  $('back-btn').style.display='';$('reset-card-btn').style.display='';statsView();idler()}
+  $('back-btn').style.display='';$('reset-card-btn').style.display='';statsView();
+  if(deckFresh())placementOffer();else idler()}
+function deckFresh(){const ns=notes.filter(n=>String(n.deckId)===String(studyDeck));
+  return !!ns.length&&ns.every(n=>!progress[n.id])}
+function placementOffer(){stage=0;$('stage-lbl').textContent='placement';
+  setPrompt(`<div class="hz" style="font-size:28px">🧪 Placement quiz</div>
+    <div class="hint">a few quick questions — if you already know some HSK levels,<br>
+      we'll unlock straight past them so you never repeat what you've learnt.</div><br>
+    <div class="hint">or start from zero below.</div>`);
+  $('feedback').textContent='';$('feedback').className='';
+  setActions(btn('🧪 Take placement quiz','primary',startQuiz),
+    btn('Start from zero',null,idler,'enter'))}
+let pqItems=[],pqIdx=0;
+function startQuiz(){const all=lessons();const byL={};
+  all.forEach(n=>{const L=hskLevel(n);(byL[L]=byL[L]||[]).push(n)});
+  pqItems=[];for(const L of Object.keys(byL)){const lg=byL[L];
+    const picks=lg.length>=6?[lg[Math.floor(lg.length*.25)],lg[Math.floor(lg.length*.75)]]:[lg[Math.floor(lg.length/2)]];
+    for(const n of picks)pqItems.push(n)}
+  pqItems.sort((a,b)=>(a.k||0)-(b.k||0));pqIdx=0;pqShow()}
+function pqShow(){const n=pqItems[pqIdx];if(!n)return pqDone();
+  cur=n;stage=0;$('stage-lbl').textContent=`placement ${pqIdx+1}/${pqItems.length}`;
+  setPrompt(`<div class="hz" style="font-size:38px">${esc(n.sHz||n.hanzi)}</div>
+    <div class="py" style="font-size:22px">${esc(n.sPy)}</div>
+    <div class="meaning">${esc(n.sMean)}</div>
+    <div class="hint">🔊 do you already understand — and could say — this sentence?</div>`);
+  $('feedback').textContent='';$('feedback').className='';
+  if(!settings.noautoplay)playSent(n);
+  setActions(btn('🔊 Replay',null,()=>playSent(n),'space'),
+    btn('✅ I know it','g-good',()=>{pqIdx++;pqShow()},'enter'),
+    btn('❌ Not yet','g-again',pqDone))}
+function pqDone(){const known=pqItems.slice(0,pqIdx);
+  const cnt={},kn={};pqItems.forEach(n=>{cnt[hskLevel(n)]=(cnt[hskLevel(n)]||0)+1});
+  known.forEach(n=>{kn[hskLevel(n)]=(kn[hskLevel(n)]||0)+1});
+  let cutLvl=0;for(let L=1;L<=6;L++){if(!cnt[L])break;if(kn[L]===cnt[L])cutLvl=L;else break}
+  let unlocked=0;
+  if(cutLvl){const lk=lessons().filter(n=>hskLevel(n)<=cutLvl);unlocked=lk.length;
+    for(const n of lk){const p=pOf(n.id);p.sentDone=true;p.skipped=true;p.state='review';
+      p.ivl=Math.max(1,p.ivl||2);p.due=Date.now()+2*864e5}
+    persist()}
+  stage=0;$('stage-lbl').textContent='placement done';
+  setPrompt(`<div class="hz" style="font-size:30px">${cutLvl?`🎉 Unlocked through HSK ${cutLvl}`:'🌱 Starting from HSK 1'}</div>
+    <div class="hint">${cutLvl?unlocked+' lesson(s) marked as already known — your first new lesson is next up.':'We\'ll teach you everything from the start.'}</div>`);
+  setActions(btn('▶ Start learning','primary',idler,'enter'))}
 function renderHome(){const ids=[...new Set(notes.map(n=>n.deckId))];
   const g=$('deck-grid');g.innerHTML='';
   if(!ids.length){g.innerHTML='<div class="hint" style="text-align:center;width:100%">No decks yet — import an .apkg above, or drop it here.</div>';return}
@@ -614,6 +656,7 @@ function idler(){if(idleTimer){clearInterval(idleTimer);idleTimer=null}
     setActions(...[act?btn('🛑 Enough for today','g-again',showHome):null,
       act?btn('▶ Continue to next sentence','primary',skipGateCore,'enter'):null,
       act?btn('📚 Review past sentences',null,reviewPast):null,
+      act?btn('🧪 Placement quiz',null,startQuiz):null,
       btn('🔄 Rebuild queue',null,idler)].filter(Boolean));
     cur=null;statsView();
     idleTimer=setInterval(idler,5000);return}
@@ -819,7 +862,7 @@ window.addEventListener('unhandledrejection',e=>diag('Promise error: '+((e.reaso
 
 /* ---------- build info ---------- */
 let lastCommit=null;
-const BUILD_DATE=1789497819;
+const BUILD_DATE=1789498811;
 function relTime(t){const s=(Date.now()-t)/1000;
   if(s<60)return Math.max(0,Math.floor(s))+'s ago';
   if(s<3600)return Math.floor(s/60)+'m ago';
