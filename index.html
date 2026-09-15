@@ -195,9 +195,12 @@ async function importApkg(file){const zip=await JSZip.loadAsync(file);
   const mf=zip.file('media');
   const mediaInfo=JSON.parse(await (mf?mf.async('string'):'{}')||'{}');
   for(const[num,fname]of Object.entries(mediaInfo)){
-    if(/\.(mp3|m4a|ogg|wav|aac)$/i.test(fname)){
-      const buf=await zip.file(num).async('arraybuffer');
-      mediaMap[fname]=URL.createObjectURL(new Blob([buf]))}}
+    const f=zip.file(num);
+    if(!f)continue;
+    try{const buf=await f.async('arraybuffer');
+      const ext=((fname.match(/\.([a-z0-9]+)$/i))||[])[1]||'mp3';
+      const MIME={mp3:'audio/mpeg',m4a:'audio/mp4',m4b:'audio/mp4',mp4:'audio/mp4',aac:'audio/aac',ogg:'audio/ogg',oga:'audio/ogg',opus:'audio/ogg',wav:'audio/wav',flac:'audio/flac',webm:'audio/webm'};
+      mediaMap[fname]=URL.createObjectURL(new Blob([buf],{type:MIME[String(ext).toLowerCase()]||'application/octet-stream'}))}catch(e){}}
   const dbFile=zip.file('collection.anki2')||zip.file('collection.anki21')||zip.file('collection.anki21b')||zip.file('collection.anki23');
   if(!dbFile){const names=Object.keys(zip.files).slice(0,10).join(', ');
     throw new Error('no collection database found (zip entries: '+names+')')}
@@ -337,8 +340,9 @@ function showIntro(){stage=0;$('stage-lbl').textContent=`introduce — ${cur.dec
   setPrompt(`<div class="py">${esc(cur.pinyin)||'<span class="hint">(no pinyin field)</span>'}</div>
     <div class="hz hidden-h">${esc(cur.hanzi)}</div>
     <div class="hint">🔊 listen. guess the meaning before revealing.</div>`);
+  $('feedback').textContent=(cur.sound&&!mediaMap[cur.sound])?'⚠ deck audio file missing — using TTS voice':'';
+  $('feedback').className=(cur.sound&&!mediaMap[cur.sound])?'warn':'';
   if(!settings.noautoplay)playAudio(cur);
-  $('feedback').textContent='';$('feedback').className='';
   setActions(
     btn('🔊 Play',null,()=>playAudio(cur),'space'),
     btn('Speak it →','primary',()=>{tts(cur.hanzi||cur.pinyin);stage=1;setTimeout(showTest,1200)},'enter'))}
@@ -427,7 +431,9 @@ async function importFiles(files){const status=[];
     if(!got.length){status.push(`⚠️ ${f.name}: 0 notes found (empty or wrong format)`);continue}
     const gids=new Set(got.map(n=>n.deckId));gids.forEach(g=>{if(!(g in decksOn))decksOn[g]=true});
     notes=notes.filter(n=>!gids.has(n.deckId)).concat(got);
-    status.push(`✅ ${f.name}: ${got.length} notes, ${gids.size} deck(s)`)
+    const mediaN=Object.keys(mediaMap).length;
+    const miss=got.filter(n=>n.sound&&!mediaMap[n.sound]).length;
+    status.push(`✅ ${f.name}: ${got.length} notes, ${gids.size} deck(s), audio files: ${mediaN}${miss?` · ⚠ ${miss} missing`:''}`)
   }catch(err){status.push(`❌ ${f.name}: ${err.message}`)}}
   $('import-status').innerHTML=status.join('<br>');
   renderDeckbar();statsView();
