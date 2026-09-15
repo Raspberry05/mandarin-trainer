@@ -37,15 +37,16 @@ main{max-width:860px;margin:0 auto;padding:24px 20px 90px}
 .chip:hover{border-color:var(--acc)}
 .chip.on{border-color:var(--acc);color:var(--acc);background:rgba(90,169,255,.08)}
 #cardbox{background:linear-gradient(180deg,rgba(255,255,255,.02),transparent),var(--card);border:1px solid var(--bd);border-radius:22px;padding:44px 36px;min-height:440px;display:flex;flex-direction:column;align-items:center;gap:20px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.35)}
-#study-wrap{display:flex;gap:14px;align-items:stretch}
+#study-wrap{display:flex;gap:16px;align-items:flex-start}
 .study-main{flex:1;min-width:0}
-#rail{display:flex;flex-direction:column;align-items:center;gap:8px;flex:0 0 30px}
-#rail-lbl{font-size:11px;color:var(--dim);writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap}
-#rail-bar{width:8px;flex:1;background:var(--panel);border:1px solid var(--bd);border-radius:6px;overflow:hidden;display:flex;align-items:flex-end}
-#rail-fill{width:100%;height:0%;background:linear-gradient(180deg,var(--acc),rgba(90,169,255,.4));transition:height .4s ease}
-#curriculum{flex:0 0 220px;background:var(--panel);border:1px solid var(--bd);border-radius:14px;padding:10px;max-height:560px;overflow:auto;font-size:13px;align-self:flex-start}
-#curriculum h3{margin:2px 0 8px;font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em}
-#curriculum .les{display:flex;gap:6px;padding:5px 7px;border-radius:8px;color:var(--dim)}
+#curriculum-wrap{flex:0 0 330px;background:var(--panel);border:1px solid var(--bd);border-radius:14px;padding:14px}
+#rail{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+#rail-lbl{font-size:12px;color:var(--dim);white-space:nowrap;flex:0 0 auto}
+#rail-bar{flex:1;height:8px;background:var(--card);border:1px solid var(--bd);border-radius:6px;overflow:hidden}
+#rail-fill{height:100%;width:0%;background:linear-gradient(90deg,var(--acc),rgba(90,169,255,.5));transition:width .4s ease}
+#curriculum{font-size:13.5px;line-height:1.5}
+#curriculum h3{margin:0 0 8px;font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em}
+#curriculum .les{display:flex;gap:6px;padding:6px 8px;border-radius:8px;color:var(--dim)}
 #curriculum .les.click{cursor:pointer}
 #curriculum .les.click:hover{background:rgba(90,169,255,.08)}
 #curriculum .les.done{color:var(--ok)}
@@ -135,8 +136,10 @@ footer{position:fixed;bottom:0;left:0;right:0;background:rgba(20,26,35,.85);back
   </div>
   <div id="deckbar"></div>
   <div id="study-wrap">
-    <div id="rail"><div id="rail-lbl"></div><div id="rail-bar"><div id="rail-fill"></div></div></div>
-    <div id="curriculum"></div>
+    <div id="curriculum-wrap">
+      <div id="rail"><div id="rail-lbl"></div><div id="rail-bar"><div id="rail-fill"></div></div></div>
+      <div id="curriculum"></div>
+    </div>
     <div class="study-main">
     <div id="cardbox">
       <div class="stage" id="stage-lbl">no decks loaded</div>
@@ -299,15 +302,16 @@ function lessons(){return liveNotes().filter(n=>sHzHas(n))
 function renderRail(){const all=lessons();const cur=activeNote();
   const curIdx=cur?all.indexOf(cur):all.length;
   const done=all.filter(n=>progress['S'+n.id]||sentComplete(n)).length;
-  $('rail-fill').style.height=(all.length?Math.round(done/all.length*100):0)+'%';
-  $('rail-lbl').textContent=all.length?done+'/'+all.length:'';
+  $('rail-fill').style.width=(all.length?Math.round(done/all.length*100):0)+'%';
+  $('rail-lbl').textContent=all.length?done+' / '+all.length+' ('+Math.round(done/all.length*100)+'%)':'';
   const c=$('curriculum');if(!c)return;
   c.innerHTML=`<h3>curriculum — lesson ${Math.min(curIdx+1,all.length)} of ${all.length}</h3>`;
   all.forEach((n,i)=>{const d=document.createElement('div');
     d.className='les '+(progress['S'+n.id]?'done':(n===cur?'cur':(i<curIdx?'done':'lock')))
       +((i<=curIdx)?' click':'');
     d.textContent=(progress['S'+n.id]?'✓ ':(n===cur?'▶ ':'🔒 '))+(i+1)+'. '+(n.sMean||n.sHz);
-    if(i<=curIdx)d.onclick=()=>{queue=[{sentNote:n}];route()};
+    if(i<=curIdx)d.onclick=()=>{if(n===cur){cur=n;showSentIntro()}
+      else{queue=[{sentNote:n}];route()}};
     else d.onclick=null;
     c.appendChild(d)})}
 function isDue(id){const p=progress[id];if(!p)return false;if(p.state==='new')return false;
