@@ -228,11 +228,12 @@ async function loadBundled(){
         hanzi:n.h,pinyin:n.p||'',meaning:n.m||'',k:n.k||0,
         sHz:n.sh||'',sPy:n.sp||'',sMean:n.sm||'',sSound:'',img:'',sound:''});
       added++}
-    if(added||legacy.length){sentSeen.clear();saveAll()}
+    if(added||legacy.length){sentSeen.clear();await saveAll()}
     diag(`bundled: +${added} added, ${legacy.length} purged, notes=${notes.length}`);
     if(added)$('import-status').innerHTML=`✅ bundled curriculum loaded: +${added} cards`;
     return added}catch(e){diag('bundled error: '+e);return 0}}
-async function loadStored(){try{const db=await idb();
+async function loadStored(){try{const db=await Promise.race([idb(),
+    new Promise((_,rej)=>setTimeout(()=>rej(new Error('idb open timeout')),4000))]);
   const arr=await new Promise((res,rej)=>{const t=db.transaction('notes','readonly');
     const r=t.objectStore('notes').get('all');r.onsuccess=()=>res(r.result||[]);r.onerror=()=>rej(r.error)});
   if(!arr.length)return false;
@@ -691,7 +692,7 @@ window.addEventListener('unhandledrejection',e=>diag('Promise error: '+((e.reaso
 
 /* ---------- build info ---------- */
 let lastCommit=null;
-const BUILD_DATE=1789441482;
+const BUILD_DATE=1789493162;
 function relTime(t){const s=(Date.now()-t)/1000;
   if(s<60)return Math.max(0,Math.floor(s))+'s ago';
   if(s<3600)return Math.floor(s/60)+'m ago';
@@ -773,11 +774,15 @@ window.addEventListener('load',async()=>{speechSynthesis.onvoiceschanged=()=>pic
   try{await getSQL()}catch(e){}
   $('boot').style.display='none';
   loadBuild();setInterval(renderBuild,30000);
-  await loadStored();
-  showHome();
-  const added=await loadBundled();
-  showHome();
-  diag(`boot done: notes=${notes.length} decks=${new Set(notes.map(n=>n.deckId)).size} bundled=${added}`)});
+  try{diag('boot: loading saved decks…');
+    await loadStored();
+    showHome();
+    diag('boot: loading bundled curricula…');
+    const added=await loadBundled();
+    showHome();
+    diag(`boot done: notes=${notes.length} decks=${new Set(notes.map(n=>n.deckId)).size} bundled=${added}`)}
+  catch(e){diag('boot failed: '+e);showHome();
+    $('import-status').innerHTML='⚠ startup issue: '+esc(String(e))+' — refresh the page; if it repeats, report this text.'}});
 const prime=()=>{try{const u=new SpeechSynthesisUtterance(' ');u.volume=0;speechSynthesis.speak(u)}catch(e){}};
 document.addEventListener('click',prime,{once:true});
 </script>
