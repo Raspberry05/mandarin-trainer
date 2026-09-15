@@ -53,9 +53,13 @@ main{max-width:1360px;margin:0 auto;padding:24px 20px 90px}
 #curriculum .les.done{color:var(--ok)}
 #curriculum .les.cur{color:var(--acc);background:rgba(90,169,255,.1);font-weight:600}
 #curriculum .les.lock{opacity:.45}
-#curriculum .lvl{margin:10px 0 4px;display:flex;justify-content:space-between;gap:8px;
+#curriculum .lvl{margin:10px 0 4px;display:flex;justify-content:space-between;gap:8px;cursor:pointer;
   font-size:11.5px;font-weight:700;color:var(--fg);text-transform:uppercase;letter-spacing:.08em;
   border-top:1px solid var(--bd);padding-top:9px}
+#curriculum .lvl:hover{color:var(--acc)}
+#curriculum .sub{display:flex;gap:6px;padding:3px 8px;margin:5px 0 2px;font-size:11px;
+  color:var(--dim);cursor:pointer;text-transform:uppercase;letter-spacing:.06em}
+#curriculum .sub:hover{color:var(--acc)}
 #curriculum .lvl:first-of-type{border-top:none;margin-top:0;padding-top:0}
 #curriculum .lvl .lvl-c{color:var(--dim);font-weight:400}
 #curriculum .lvl.done{color:var(--ok)}
@@ -308,6 +312,7 @@ function lessons(){return liveNotes().filter(n=>sHzHas(n))
   .sort((a,b)=>(a.k||0)-(b.k||0)||(a.id<b.id?-1:1))}
 function hskLevel(n){const k=n.k||0;return k<=150?1:k<=300?2:k<=600?3:k<=1200?4:k<=2500?5:6}
 function levelComplete(lvl){return lessons().filter(n=>hskLevel(n)===lvl).every(n=>progress['S'+n.id])}
+const expLevels=new Set(),expSubs=new Set();let RAIL_INIT=false;
 function renderRail(){const all=lessons();const cur=activeNote();
   const curIdx=cur?all.indexOf(cur):all.length;
   const done=all.filter(n=>progress['S'+n.id]||sentComplete(n)).length;
@@ -315,21 +320,32 @@ function renderRail(){const all=lessons();const cur=activeNote();
   $('rail-lbl').textContent=all.length?done+' / '+all.length+' ('+Math.round(done/all.length*100)+'%)':'';
   const c=$('curriculum');if(!c)return;
   c.innerHTML=`<h3>curriculum — lesson ${Math.min(curIdx+1,all.length)} of ${all.length}</h3>`;
-  let lvl=0;
-  all.forEach((n,i)=>{const L=hskLevel(n);
-    if(L!==lvl){lvl=L;const lg=all.filter(m=>hskLevel(m)===L);
-      const dn=lg.filter(m=>progress['S'+m.id]).length;
-      const h=document.createElement('div');h.className='lvl'+(dn===lg.length?' done':'');
-      h.innerHTML=`HSK ${L} <span class="lvl-c">${dn}/${lg.length}${dn===lg.length?' ✓':''}</span>`;
-      c.appendChild(h)}
-    const d=document.createElement('div');
-    d.className='les '+(progress['S'+n.id]?'done':(n===cur?'cur':(i<curIdx?'done':'lock')))
-      +((i<=curIdx)?' click':'');
-    d.textContent=(progress['S'+n.id]?'✓ ':(n===cur?'▶ ':'🔒 '))+(i+1)+'. '+(n.sMean||n.sHz);
-    if(i<=curIdx)d.onclick=()=>{if(n===cur){cur=n;showSentIntro()}
-      else{queue=[{sentNote:n}];route()}};
-    else d.onclick=null;
-    c.appendChild(d)})}
+  const byLvl={};all.forEach((n,i)=>{const L=hskLevel(n);(byLvl[L]=byLvl[L]||[]).push({n,i})});
+  let railInit=RAIL_INIT;
+  for(const L of Object.keys(byLvl)){const lg=byLvl[L];
+    if(!RAIL_INIT&&cur&&hskLevel(cur)===+L){expLevels.add(L);RAIL_INIT=true}
+    const dn=lg.filter(x=>progress['S'+x.n.id]).length;
+    const h=document.createElement('div');h.className='lvl'+(dn===lg.length?' done':'');
+    h.innerHTML=`<span>${expLevels.has(L)?'▾':'▸'} HSK ${L}</span><span class="lvl-c">${dn}/${lg.length}${dn===lg.length?' ✓':''}</span>`;
+    h.onclick=()=>{expLevels.has(L)?expLevels.delete(L):expLevels.add(L);renderRail()};
+    c.appendChild(h);
+    if(!expLevels.has(L))continue;
+    for(let s=0;s<lg.length;s+=10){const chunk=lg.slice(s,s+10);
+      const key=L+'_'+s;
+      if(cur&&chunk.some(x=>x.n===cur))expSubs.add(key);
+      const sh=document.createElement('div');sh.className='sub';
+      sh.textContent=`${expSubs.has(key)?'▾':'▸'} lessons ${chunk[0].i+1}–${chunk[chunk.length-1].i+1}`;
+      sh.onclick=()=>{expSubs.has(key)?expSubs.delete(key):expSubs.add(key);renderRail()};
+      c.appendChild(sh);
+      if(!expSubs.has(key))continue;
+      for(const {n,i} of chunk){const d=document.createElement('div');
+        d.className='les '+(progress['S'+n.id]?'done':(n===cur?'cur':(i<curIdx?'done':'lock')))
+          +((i<=curIdx)?' click':'');
+        d.textContent=(progress['S'+n.id]?'✓ ':(n===cur?'▶ ':'🔒 '))+(i+1)+'. '+(n.sMean||n.sHz);
+        if(i<=curIdx)d.onclick=()=>{if(n===cur){cur=n;showSentIntro()}
+          else{queue=[{sentNote:n}];route()}};
+        else d.onclick=null;
+        c.appendChild(d)}}}}
 function isDue(id){const p=progress[id];if(!p)return false;if(p.state==='new')return false;
   if(p.state==='learn'||p.state==='relearn')return p.due<=Date.now();
   return p.due<=Date.now();}
