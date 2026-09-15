@@ -76,6 +76,7 @@ footer{position:fixed;bottom:0;left:0;right:0;background:rgba(20,26,35,.85);back
 <input type="file" id="file-in" accept=".apkg,.colpkg,.txt,.csv" multiple hidden>
 <button id="import-btn">⬆ Import decks</button>
 <button id="settings-btn">⚙ Settings</button>
+<button id="reset-card-btn" title="Erase this card's progress and learn it fresh">♻ Restart card</button>
 </header>
 <main>
 <div id="build-info">🔧 checking build…</div>
@@ -556,6 +557,11 @@ window.addEventListener('dragleave',e=>{dragDepth--;if(dragDepth<=0){dragDepth=0
 window.addEventListener('drop',e=>{e.preventDefault();dragDepth=0;$('drop-overlay').classList.remove('show');
   if(e.dataTransfer?.files?.length)importFiles([...e.dataTransfer.files])});
 $('settings-btn').onclick=openSettings;
+$('reset-card-btn').onclick=()=>{
+  if(!cur){alert('No active card.');return}
+  if(!confirm('Reset progress for "'+(cur.hanzi||'')+'"? It will be learned fresh.'))return;
+  delete progress[cur.id];persist();statsView();
+  idler()};
 $('settings-close').onclick=closeSettings;
 $('deck-close').onclick=()=>$('deck-modal').classList.remove('open');
 $('preset-save').onclick=()=>{const n=$('s-pname').value.trim()||'Default';
