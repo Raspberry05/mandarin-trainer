@@ -213,7 +213,7 @@ async function importApkg(file,onProg){const zip=await JSZip.loadAsync(file);
         jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',gif:'image/gif',webp:'image/webp',svg:'image/svg+xml',bmp:'image/bmp',avif:'image/avif'};
       mediaMap[String(fname).toLowerCase()]=URL.createObjectURL(new Blob([buf],{type:MIME[String(ext).toLowerCase()]||'application/octet-stream'}))}catch(e){}
     if(++mi%25===0&&onProg)onProg(`extracting media ${mi}/${entries.length}`)}
-  const dbFile=zip.file('collection.anki2')||zip.file('collection.anki21')||zip.file('collection.anki21b')||zip.file('collection.anki23');
+  const dbFile=zip.file('collection.anki21')||zip.file('collection.anki21b')||zip.file('collection.anki23')||zip.file('collection.anki2');
   if(!dbFile){const names=Object.keys(zip.files).slice(0,10).join(', ');
     throw new Error('no collection database found (zip entries: '+names+')')}
   const SQL=await getSQL();
