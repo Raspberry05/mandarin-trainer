@@ -503,6 +503,7 @@ function startTimer(){stopTimer();if(!settings.maxsec)return;t0=Date.now();
     $('timer').textContent=Math.ceil(left)+'s';if(left<=0)stopTimer()},250)}
 let idleTimer=null;
 function idler(){if(idleTimer){clearInterval(idleTimer);idleTimer=null}
+  if(studyDeck&&!notes.some(n=>String(n.deckId)===String(studyDeck))){showHome();return}
   queue=buildQueue();if(!queue.length){
     const act=activeNote();
     let goal='';
@@ -578,7 +579,8 @@ function sentComplete(n){const p=progress[n.id];
   if(!(n.sHz||n.sMean))return p?.state==='review';
   if(!p||!p.sentDone)return false;
   return sentReady(n)}
-function activeNote(){const c=[...notes].sort((a,b)=>(a.k||0)-(b.k||0)||(a.id<b.id?-1:1));
+function activeNote(){const c=notes.filter(n=>decksOn[n.deckId])
+    .sort((a,b)=>(a.k||0)-(b.k||0)||(a.id<b.id?-1:1));
   for(const n of c)if(!sentComplete(n))return n;return null}
 function showSentIntro(){const A=activeNote()||cur;stage=0;$('stage-lbl').textContent=`lesson — ${cur.deck}`;
   setPrompt(`<div class="hint">today you'll learn to say:</div>
@@ -700,7 +702,7 @@ window.addEventListener('unhandledrejection',e=>diag('Promise error: '+((e.reaso
 
 /* ---------- build info ---------- */
 let lastCommit=null;
-const BUILD_DATE=1789494255;
+const BUILD_DATE=1789494455;
 function relTime(t){const s=(Date.now()-t)/1000;
   if(s<60)return Math.max(0,Math.floor(s))+'s ago';
   if(s<3600)return Math.floor(s/60)+'m ago';
