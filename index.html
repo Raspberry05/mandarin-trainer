@@ -212,9 +212,12 @@ async function loadBundled(){
   // bundled curricula are part of Language Trainer itself — always loaded, cannot be hidden
   try{
     let j=null,err=null;
-    for(let i=0;i<3&&!j;i++){
-      try{const r=await fetch('data/mandarin.json?v='+BUILD_DATE,{cache:'no-store'});if(!r.ok)throw new Error('http '+r.status);j=await r.json()}
-      catch(e){err=e;if(i<2)await new Promise(res=>setTimeout(res,1500))}}
+    const urls=['data/mandarin.json?v='+BUILD_DATE,
+      'https://raw.githubusercontent.com/Raspberry05/mandarin-trainer/master/data/mandarin.json'];
+    for(let i=0;i<urls.length&&!j;i++){
+      try{diag('bundled: fetching '+urls[i].split('?')[0].slice(0,60));
+        const r=await fetch(urls[i],{cache:'no-store'});if(!r.ok)throw new Error('http '+r.status);j=await r.json()}
+      catch(e){err=e;j=null}}
     if(!j){diag('bundled fetch failed: '+err);$('import-status').innerHTML='⚠ bundled curricula failed to load ('+esc(String(err))+') — check connection or import an .apkg manually';return 0}
     let added=0;
     // migration: purge legacy per-file bundled ids (hsk15/hsk6) replaced by combined 'mz'
@@ -229,7 +232,7 @@ async function loadBundled(){
         sHz:n.sh||'',sPy:n.sp||'',sMean:n.sm||'',sSound:'',img:'',sound:''});
       added++}
     if(added||legacy.length){sentSeen.clear();await saveAll()}
-    diag(`bundled: +${added} added, ${legacy.length} purged, notes=${notes.length}`);
+    diag(`bundled: +${added} added, ${legacy.length} purged, notes=${notes.length}, mz-present=${notes.some(n=>n.deckId==='mz')}`);
     if(added)$('import-status').innerHTML=`✅ bundled curriculum loaded: +${added} cards`;
     return added}catch(e){diag('bundled error: '+e);return 0}}
 async function loadStored(){try{const db=await Promise.race([idb(),
@@ -686,13 +689,15 @@ function readSettings(){SKEYS.forEach(k=>{const el=$('s-'+k);
 function openSettings(){fillSettings(settings);$('settings-modal').classList.add('open')}
 function closeSettings(){readSettings();statsView();$('settings-modal').classList.remove('open')}
 
-function diag(m){const d=$('diag');if(d)d.textContent=m;console.log('[diag]',m)}
+function diag(m){diagLog.push(m);if(diagLog.length>4)diagLog.shift();
+  const d=$('diag');if(d)d.textContent=diagLog.join(' | ');console.log('[diag]',m)}
+let diagLog=[];
 window.addEventListener('error',e=>diag('JS error: '+e.message+' @ '+(e.filename||'').split('/').pop()+':'+e.lineno));
 window.addEventListener('unhandledrejection',e=>diag('Promise error: '+((e.reason&&e.reason.message)||e.reason)));
 
 /* ---------- build info ---------- */
 let lastCommit=null;
-const BUILD_DATE=1789493162;
+const BUILD_DATE=1789493745;
 function relTime(t){const s=(Date.now()-t)/1000;
   if(s<60)return Math.max(0,Math.floor(s))+'s ago';
   if(s<3600)return Math.floor(s/60)+'m ago';
