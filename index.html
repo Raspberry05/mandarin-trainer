@@ -182,7 +182,9 @@ function tts(text,rate){if(!('speechSynthesis' in window)||!text)return;
   speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);
   u.lang='zh-CN';u.rate=rate||0.9;const v=pickVoice();if(v)u.voice=v;
   speechSynthesis.speak(u)}
-function playSound(note){const m=note.sound&&mediaMap[note.sound];
+function soundUrl(note){if(!note.sound)return null;
+  return mediaMap[note.sound]||mediaMap[String(note.sound).toLowerCase()]||null}
+function playSound(note){const m=soundUrl(note);
   if(m){const a=new Audio(m);a.play().catch(()=>tts(note.hanzi));return true}
   return false}
 function playAudio(note){if(!playSound(note))tts(note.hanzi||note.pinyin)}
@@ -200,7 +202,7 @@ async function importApkg(file){const zip=await JSZip.loadAsync(file);
     try{const buf=await f.async('arraybuffer');
       const ext=((fname.match(/\.([a-z0-9]+)$/i))||[])[1]||'mp3';
       const MIME={mp3:'audio/mpeg',m4a:'audio/mp4',m4b:'audio/mp4',mp4:'audio/mp4',aac:'audio/aac',ogg:'audio/ogg',oga:'audio/ogg',opus:'audio/ogg',wav:'audio/wav',flac:'audio/flac',webm:'audio/webm'};
-      mediaMap[fname]=URL.createObjectURL(new Blob([buf],{type:MIME[String(ext).toLowerCase()]||'application/octet-stream'}))}catch(e){}}
+      mediaMap[String(fname).toLowerCase()]=URL.createObjectURL(new Blob([buf],{type:MIME[String(ext).toLowerCase()]||'application/octet-stream'}))}catch(e){}}
   const dbFile=zip.file('collection.anki2')||zip.file('collection.anki21')||zip.file('collection.anki21b')||zip.file('collection.anki23');
   if(!dbFile){const names=Object.keys(zip.files).slice(0,10).join(', ');
     throw new Error('no collection database found (zip entries: '+names+')')}
@@ -340,8 +342,8 @@ function showIntro(){stage=0;$('stage-lbl').textContent=`introduce — ${cur.dec
   setPrompt(`<div class="py">${esc(cur.pinyin)||'<span class="hint">(no pinyin field)</span>'}</div>
     <div class="hz hidden-h">${esc(cur.hanzi)}</div>
     <div class="hint">🔊 listen. guess the meaning before revealing.</div>`);
-  $('feedback').textContent=(cur.sound&&!mediaMap[cur.sound])?'⚠ deck audio file missing — using TTS voice':'';
-  $('feedback').className=(cur.sound&&!mediaMap[cur.sound])?'warn':'';
+  $('feedback').textContent=(cur.sound&&!soundUrl(cur))?'⚠ deck audio file missing — using TTS voice':'';
+  $('feedback').className=(cur.sound&&!soundUrl(cur))?'warn':'';
   if(!settings.noautoplay)playAudio(cur);
   setActions(
     btn('🔊 Play',null,()=>playAudio(cur),'space'),
@@ -460,6 +462,8 @@ document.addEventListener('keydown',e=>{
   if(e.key in map){const b=$('actions').querySelectorAll('.g-again,.g-hard,.g-good,.g-easy')[map[e.key]];if(b)b.click()}});
 setInterval(()=>{if(cur&&(stage===0||stage===1)&&progress[cur.id]&&(progress[cur.id].state==='learn'||progress[cur.id].state==='relearn')&&progress[cur.id].due<=Date.now()){/* learning cards resurface handled by queue */}},10000);
 window.addEventListener('load',()=>{speechSynthesis.onvoiceschanged=()=>pickVoice();loadBuild();setInterval(renderBuild,30000);statsView()});
+document.addEventListener('click',function prime(){document.removeEventListener('click',arguments.callee);
+  try{const u=new SpeechSynthesisUtterance(' ');u.volume=0;speechSynthesis.speak(u)}catch(e){}},{once:true});
 </script>
 </body>
 </html>
