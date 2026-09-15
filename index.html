@@ -232,7 +232,8 @@ async function loadBundled(){
       if(!d){diag('bundled: note deck missing, skipped');continue}
       notes.push({id:n.id,deckId:d.id,deck:d.name,lang:d.lang,desc:d.desc,
         hanzi:n.h,pinyin:n.p||'',meaning:n.m||'',k:n.k||0,
-        sHz:n.sh||'',sPy:n.sp||'',sMean:n.sm||'',sSound:'',img:'',sound:''});
+        sHz:n.sh||'',sPy:n.sp||'',sMean:n.sm||'',sSound:'',
+        img:n.img?`data/img/${n.id}.webp`:'',sound:''});
       added++}
     if(added||legacy.length){sentSeen.clear();await saveAll()}
     diag(`bundled: +${added} added, ${legacy.length} purged, notes=${notes.length}, mz-present=${notes.some(n=>n.deckId==='mz')}`);
@@ -293,6 +294,9 @@ function tts(text,rate){if(!('speechSynthesis' in window)||!text)return;
   speechSynthesis.speak(u)}
 function soundUrl(note){if(!note.sound)return null;
   return mediaMap[note.sound]||mediaMap[String(note.sound).toLowerCase()]||null}
+function imgSrc(note){if(!note.img)return null;
+  if(String(note.img).startsWith('data/'))return note.img;
+  return mediaMap[String(note.img).toLowerCase()]||null}
 function playSound(note){const m=soundUrl(note);
   if(m){const a=new Audio(m);a.play().catch(()=>tts(note.hanzi));return true}
   return false}
@@ -547,7 +551,7 @@ function showSentQ(){stage=5;$('stage-lbl').textContent='sentence — first prac
   $('feedback').textContent='';$('feedback').className='';
   setActions(btn('✅ I said it','g-next',()=>showSentR(null),'enter'),
     btn('👀 Show me','g-hard',()=>showSentR(null)))}
-function fullView(note){const iu=note.img&&mediaMap[String(note.img).toLowerCase()];
+function fullView(note){const iu=imgSrc(note);
   return `<div class="py">${esc(note.pinyin)||'<span class="hint">(no pinyin)</span>'}</div>
     <div class="hz">${esc(note.hanzi)}</div>
     ${iu?`<img class="note-img" src="${iu}" alt="">`:''}
@@ -568,7 +572,7 @@ function sentWords(n){const S=n.sHz||'';const seen=new Set();const out=[];
     if(!rest)break}
   return out}
 function sentView(note){const su=note.sSound&&soundUrl({sound:note.sSound});
-  const iu=note.img&&mediaMap[String(note.img).toLowerCase()];
+  const iu=imgSrc(note);
   return `${iu?`<img class="note-img" src="${iu}" alt="">`:''}
     <div class="hz" style="font-size:30px">${sentHtml(note)}</div>
     <div class="py" style="font-size:22px">${esc(note.sPy)}</div>
@@ -594,7 +598,7 @@ function showSentIntro(){const A=activeNote()||cur;stage=0;$('stage-lbl').textCo
     <div class="hz" style="font-size:34px">${esc(A.sHz)}</div>
     <div class="py" style="font-size:26px">${esc(A.sPy)}</div>
     <div class="meaning">${esc(A.sMean)}</div>
-    ${A.img&&mediaMap[String(A.img).toLowerCase()]?`<img class="note-img" src="${mediaMap[String(A.img).toLowerCase()]}" alt="">`:''}
+    ${imgSrc(A)?`<img class="note-img" src="${imgSrc(A)}" alt="">`:''}
     <div class="hint">🔊 just listen for now. then we break it down word by word.</div>`);
   $('feedback').textContent='';$('feedback').className='';
   if(!settings.noautoplay)playSent(A);
@@ -719,7 +723,7 @@ window.addEventListener('unhandledrejection',e=>diag('Promise error: '+((e.reaso
 
 /* ---------- build info ---------- */
 let lastCommit=null;
-const BUILD_DATE=1789495757;
+const BUILD_DATE=1789496247;
 function relTime(t){const s=(Date.now()-t)/1000;
   if(s<60)return Math.max(0,Math.floor(s))+'s ago';
   if(s<3600)return Math.floor(s/60)+'m ago';
