@@ -203,8 +203,19 @@ async function importApkg(file){const zip=await JSZip.loadAsync(file);
     dbBytes=fzstd.decompress(dbBytes)}
   const db=new SQL.Database(dbBytes);
   const models={},decks={};
-  db.exec('SELECT json FROM col')[0].values.forEach(([j])=>{const c=JSON.parse(j);
-    (c.models||[]).forEach(m=>models[m.id]=m);(c.decks||[]).forEach(d=>decks[d.id]=d)});
+  const tabs=(db.exec("SELECT name FROM sqlite_master WHERE type='table'")[0]?.values.map(v=>v[0]))||[];
+  const scan=t=>{let res;try{res=db.exec(`SELECT * FROM "${t}"`)}catch(e){return[]}
+    const out=[];for(const row of (res[0]?.values||[]))for(const cell of row){
+      if(typeof cell==='string'&&cell.trim().startsWith('{')){
+        try{const o=JSON.parse(cell);if(o&&o.name!=null)out.push(o)}catch(e){}}}
+    return out};
+  if(tabs.includes('models')||tabs.includes('notetypes')){
+    scan('models').concat(scan('notetypes')).forEach(m=>{if(m.flds)models[m.id]=m});
+    scan('decks').forEach(d=>{if(d.id!=null)decks[d.id]=d});
+  }else{
+    const c=db.exec('SELECT models,decks FROM col')[0].values[0];
+    JSON.parse(c[0]).forEach(m=>models[m.id]=m);
+    JSON.parse(c[1]).forEach(d=>decks[d.id]=d)}
   const q=db.exec('SELECT id,mid,flds FROM notes');
   const deckOf={};
   try{db.exec('SELECT nid,did FROM cards')[0].values.forEach(([nid,did])=>{if(!(nid in deckOf))deckOf[nid]=did})}catch(e){}
