@@ -406,7 +406,7 @@ function sentView(note){const su=note.sSound&&soundUrl({sound:note.sSound});
     <div class="hz" style="font-size:30px">${esc(note.sHz)}</div>
     <div class="py" style="font-size:22px">${esc(note.sPy)}</div>
     <div class="meaning">${esc(note.sMean)}</div>
-    ${su?'':'<div class="hint">⚠ no sentence audio — TTS</div>'}'}
+    ${su?'':'<div class="hint">⚠ no sentence audio — TTS</div>'}`}
 function audioWarn(){return (cur.sound&&!soundUrl(cur))?'<div class="hint">⚠ deck audio missing — TTS voice</div>':''}
 function playSent(){const m=cur.sSound&&soundUrl({sound:cur.sSound});
   if(m){new Audio(m).play().catch(()=>tts(cur.sHz))}else tts(cur.sHz||cur.hanzi)}
