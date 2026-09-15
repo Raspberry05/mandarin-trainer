@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Mandarin Trainer — Anki audio-first</title>
+<title>Language Trainer</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 :root{--bg:#0b0e14;--panel:#141a23;--card:#171e29;--fg:#eef2f7;--dim:#8b96a5;--acc:#5aa9ff;--acc2:#7c5aff;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171;--bd:#242d3a}
@@ -70,38 +70,55 @@ footer{position:fixed;bottom:0;left:0;right:0;background:rgba(20,26,35,.85);back
 .sw:hover{color:var(--acc)}
 .sw:hover::after{content:attr(data-t);position:absolute;left:50%;top:calc(100% + 6px);transform:translateX(-50%);background:var(--panel);border:1px solid var(--acc);color:var(--fg);border-radius:10px;padding:8px 12px;font-size:15px;white-space:nowrap;z-index:20;box-shadow:0 8px 24px rgba(0,0,0,.5)}
 .word-chips{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.hero{text-align:center;margin:18px 0 22px}
+.hero h2{font-size:30px;margin:0 0 6px;font-weight:700}
+#home-drop{background:var(--panel);border:2px dashed #323d4e;border-radius:18px;padding:26px;display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap;font-size:16px;color:var(--dim);margin-bottom:16px}
+#deck-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;margin-top:18px}
+.deckcard{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:20px;cursor:pointer;transition:all .15s ease;position:relative}
+.deckcard:hover{border-color:var(--acc);transform:translateY(-2px);box-shadow:0 8px 28px rgba(0,0,0,.35)}
+.deckcard h3{margin:0 0 10px;font-size:17px;color:var(--fg);word-break:break-all}
+.deckcard .dmeta{color:var(--dim);font-size:13.5px;line-height:1.7}
+.deckcard .dmeta b{color:var(--acc)}
+.deckcard .dreset{position:absolute;top:12px;right:12px;padding:5px 10px;font-size:12px;border-radius:8px}
 @media(max-width:640px){#cardbox{padding:28px 18px}.hz{font-size:52px}.py{font-size:36px}.meaning{font-size:21px}}
 </style>
 </head>
 <body>
 <div id="boot"><div class="spin"></div><div class="hint">loading libraries (sql.js, jszip, zstd)…</div></div>
 <header>
-<h1>🎵 Mandarin Trainer — audio-first</h1>
+<h1>Language Trainer</h1>
+<button id="back-btn" style="display:none">‹ Home</button>
 <input type="file" id="file-in" accept=".apkg,.colpkg,.txt,.csv" multiple hidden>
-<button id="import-btn">⬆ Import decks</button>
 <button id="settings-btn">⚙ Settings</button>
 <button id="reset-card-btn" title="Erase this card's progress and learn it fresh">♻ Restart card</button>
 </header>
 <main>
-<div id="build-info">🔧 checking build…</div>
-<div class="stats">
-<span>New today: <b id="st-new">0</b></span>
-<span>Reviews today: <b id="st-rev">0</b></span>
-<span>Queue: <b id="st-queue">0</b></span>
-<span>Leeched: <b id="st-leech">0</b></span>
+<div id="home-view">
+  <div class="hero"><h2>Language Trainer</h2><p class="hint">Sentence-first Anki-style lessons. Import a deck, pick it, learn.</p></div>
+  <div id="home-drop">📦 drop .apkg / .txt here — or <button id="import-btn" class="primary">⬆ Import decks</button></div>
+  <div id="import-status" class="hint"></div>
+  <div id="deck-grid"></div>
 </div>
-<div id="deckbar"></div>
-<div id="drop-overlay">📦 drop .apkg / .txt / .csv here</div>
-<div id="import-status" class="hint" style="margin-bottom:12px"></div>
-<div id="cardbox">
-<div class="stage" id="stage-lbl">no decks loaded</div>
-<div class="prompt" id="prompt">Import your Anki deck (<b>.apkg</b>) or a <b>TSV</b> (hanzi&nbsp;&lt;tab&gt;&nbsp;pinyin&nbsp;&lt;tab&gt;&nbsp;meaning).<br><br><b>Drag &amp; drop</b> the file anywhere on this page — or use the button.<br><br><span class="hint">From Anki: File → Export → Apkg. Or Notes as text.</span></div>
-<div class="btnrow" id="actions"></div>
-<div id="feedback"></div>
-<div id="timer"></div>
+<div id="study-view" style="display:none">
+  <div class="stats">
+    <span>New today: <b id="st-new">0</b></span>
+    <span>Reviews today: <b id="st-rev">0</b></span>
+    <span>Queue: <b id="st-queue">0</b></span>
+    <span>Leeched: <b id="st-leech">0</b></span>
+  </div>
+  <div id="deckbar"></div>
+  <div id="cardbox">
+    <div class="stage" id="stage-lbl">no decks loaded</div>
+    <div class="prompt" id="prompt"></div>
+    <div class="btnrow" id="actions"></div>
+    <div id="feedback"></div>
+    <div id="timer"></div>
+  </div>
 </div>
 </main>
+<div id="drop-overlay">📦 drop .apkg / .txt / .csv here</div>
 <footer>
+<span id="build-info">checking build…</span>
 <span class="hint">Space = replay audio · Enter = next / "I know it" · flow: sentence → word → test → sentence practice</span>
 </footer>
 
@@ -155,7 +172,8 @@ const save=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
 let progress=load(LS.p,{});
 let settings=load(LS.s,null);
 let presets=load(LS.pr,{});
-let counts=load(LS.c,{d:'',n:0,r:0});
+let counts=load(LS.c,{d:'',n:{},r:{}});
+if(typeof counts.n==='number'||typeof counts.r==='number')counts={d:counts.d,n:{},r:{}};
 let notes=[];            // {id,deck,hanzi,pinyin,meaning,sound,img,deckId}
 let mediaMap={};         // filename -> blobURL (per import)
 let mediaBlobs={};       // filename -> Blob (for IndexedDB persistence)
@@ -199,14 +217,17 @@ async function loadStored(){try{const db=await idb();
 const $=id=>document.getElementById(id);
 const today=()=>new Date().toISOString().slice(0,10);
 function rollCounts(){const t=today();if(counts.d!==t){counts={d:t,n:0,r:0};save(LS.c,counts);}}
+function rollCounts(){const t=today();if(counts.d!==t){counts={d:t,n:{},r:{}};save(LS.c,counts);}}
 function statsView(){rollCounts();
   const live=notes.filter(n=>decksOn[n.deckId]&&!progress[n.id]?.leech);
   const due=live.filter(n=>isDue(n.id)).length+
     live.filter(n=>{const sp=progress['S'+n.id];return sp&&sp.due<=Date.now()}).length;
   const newLeft=live.filter(n=>!progress[n.id]).length;
-  const nLeft=Math.max(0,Math.min(settings.newday,Math.max(0,settings.newday-counts.n)));
-  $('st-new').textContent=counts.n+'/'+settings.newday;
-  $('st-rev').textContent=counts.r+'/'+settings.maxrev;
+  const d=studyDeck||'';
+  const nToday=(counts.n[d]||0),rToday=(counts.r[d]||0);
+  const nLeft=Math.max(0,Math.min(settings.newday,Math.max(0,settings.newday-nToday)));
+  $('st-new').textContent=nToday+'/'+settings.newday;
+  $('st-rev').textContent=rToday+'/'+settings.maxrev;
   $('st-queue').textContent=due+(nLeft?` (+${nLeft} new)`:'');
   $('st-leech').textContent=notes.filter(n=>progress[n.id]?.leech).length;}
 function isDue(id){const p=progress[id];if(!p)return false;if(p.state==='new')return false;
@@ -350,15 +371,16 @@ function grade(action){ // Again Hard Good Easy = 0 1 2 3
   const p=pOf(cur.id);const L=parseSteps(settings.steps)||[5,50,120];
   const R=parseSteps(settings.relearn)||[5,50,120];const m=mult();
   rollCounts();
+  const dk=cur.deckId;
   if(p.state==='new'||p.state==='learn'){
     if(action===0){p.state='learn';p.step=0;p.due=Date.now()+L[0]*1000}
     else if(action===1){p.state='learn';p.due=Date.now()+(L[p.step]*1.5)*1000}
-    else if(action===2){if(p.state==='new')counts.n++;p.state='learn';
+    else if(action===2){if(p.state==='new')counts.n[dk]=(counts.n[dk]||0)+1;p.state='learn';
       if(p.step+1>=L.length){p.state='review';p.ivl=1;p.due=Date.now()+864e5}
       else{p.step++;p.due=Date.now()+L[p.step]*1000}}
-    else{if(p.state==='new')counts.n++;p.state='review';p.ivl=4;p.due=Date.now()+4*864e5}
+    else{if(p.state==='new')counts.n[dk]=(counts.n[dk]||0)+1;p.state='review';p.ivl=4;p.due=Date.now()+4*864e5}
   }else if(p.state==='review'){
-    counts.r++;
+    counts.r[dk]=(counts.r[dk]||0)+1;
     if(action===0){p.lapses++;p.ease=Math.max(1.3,p.ease-0.2);p.state='relearn';p.step=0;p.due=Date.now()+R[0]*1000;
       if(p.lapses>=settings.leech){if(settings.leechact.startsWith('Suspend'))p.leech=true;else p.tag=true}}
     else{
@@ -376,8 +398,36 @@ function grade(action){ // Again Hard Good Easy = 0 1 2 3
     else{p.state='review';p.ivl=Math.max(2,Math.round(p.ivl*0.7));p.due=Date.now()+p.ivl*864e5}}
   persist();statsView()}
 
-/* ---------- render ---------- */
+/* ---------- views ---------- */
+let view='home',studyDeck=null;
+function showHome(){view='home';$('home-view').style.display='';$('study-view').style.display='none';
+  $('back-btn').style.display='none';$('reset-card-btn').style.display='none';renderHome()}
+function startDeck(d){view='study';studyDeck=d;decksOn={};decksOn[d]=true;saveSettings();sentSeen.clear();
+  renderDeckbar();$('home-view').style.display='none';$('study-view').style.display='';
+  $('back-btn').style.display='';$('reset-card-btn').style.display='';statsView();idler()}
+function renderHome(){const ids=[...new Set(notes.map(n=>n.deckId))];
+  const g=$('deck-grid');g.innerHTML='';
+  if(!ids.length){g.innerHTML='<div class="hint" style="text-align:center;width:100%">No decks yet — import an .apkg above, or drop it here.</div>';return}
+  rollCounts();
+  for(const d of ids){const ns=notes.filter(n=>n.deckId===d);
+    const newC=ns.filter(n=>!progress[n.id]).length;
+    const revC=ns.filter(n=>progress[n.id]?.state==='review').length;
+    const learnC=ns.length-newC-revC;
+    const sentC=ns.filter(n=>progress['S'+n.id]).length;
+    const card=document.createElement('div');card.className='deckcard';
+    card.innerHTML=`<h3>${esc(String(d).replace(/^tsv-/,''))}</h3>
+      <div class="dmeta">${ns.length} cards · <b>${newC}</b> new · ${learnC} learning · <b>${revC}</b> reviewing<br>${sentC} sentence(s) unlocked</div>
+      <button class="dreset" data-r="${esc(String(d))}">♻ reset</button>`;
+    card.onclick=e=>{if(e.target.closest('.dreset'))return;startDeck(d)};
+    g.appendChild(card)}
+  [...g.querySelectorAll('.dreset')].forEach(b=>b.onclick=e=>{
+    e.stopPropagation();resetDeck(b.dataset.r)})}
+function resetDeck(d){const ns=notes.filter(n=>n.deckId===d);
+  if(!confirm(`Reset ALL progress for "${d}" (${ns.length} cards)? Lessons start over.`))return;
+  for(const n of ns){delete progress[n.id];delete progress['S'+n.id]}
+  counts.n[d]=0;counts.r[d]=0;persist();renderHome()}
 let queue=[];
+
 function renderDeckbar(){const ids=[...new Set(notes.map(n=>n.deckId))];
   const bar=$('deckbar');bar.innerHTML='';
   for(const d of ids){const c=document.createElement('span');
@@ -568,21 +618,24 @@ function closeSettings(){readSettings();statsView();$('settings-modal').classLis
 
 /* ---------- build info ---------- */
 let lastCommit=null;
+const BUILD_DATE=1789438002;
 function relTime(t){const s=(Date.now()-t)/1000;
   if(s<60)return Math.max(0,Math.floor(s))+'s ago';
   if(s<3600)return Math.floor(s/60)+'m ago';
   if(s<86400)return Math.floor(s/3600)+'h ago';
   return Math.floor(s/86400)+'d ago'}
 function renderBuild(){if(!lastCommit)return;
-  $('build-info').innerHTML=`🔧 build <b>${lastCommit.sha}</b> · updated ${relTime(lastCommit.t)} · <a href="https://github.com/Raspberry05/mandarin-trainer/commit/${lastCommit.sha}" target="_blank">${esc(lastCommit.msg)}</a>`}
+  const outdated=(Date.now()-BUILD_DATE)<lastCommit.t-120e3?' <span class="hint">(outdated — refresh)</span>':'';
+  $('build-info').innerHTML=`build <b>${lastCommit.sha}</b> · updated ${relTime(lastCommit.t)}${outdated}`}
 async function loadBuild(){try{
   const r=await fetch('https://api.github.com/repos/Raspberry05/mandarin-trainer/commits/master');
   if(!r.ok)throw 0;const j=await r.json();
-  lastCommit={sha:j.sha.slice(0,7),t:new Date(j.commit.committer.date).getTime(),msg:(String(j.commit.message).split('\n')[0]||'').slice(0,60)};
-  renderBuild()}catch(e){$('build-info').textContent='🔧 build info unavailable'}}
+  lastCommit={sha:j.sha.slice(0,7),t:new Date(j.commit.committer.date).getTime()};
+  renderBuild()}catch(e){$('build-info').textContent='build info unavailable'}}
 
 /* ---------- wiring ---------- */
 $('import-btn').onclick=()=>$('file-in').click();
+$('back-btn').onclick=showHome;
 async function importFiles(files){const status=[];
   for(const f of files){try{
     const prog=t=>{status[status.length-1]=`⏳ ${f.name}: ${t}`;$('import-status').innerHTML=status.join('<br>')};
@@ -607,10 +660,8 @@ async function importFiles(files){const status=[];
       status.push(`&nbsp;&nbsp;↳ sample: "${esc(String(got[0].hanzi).slice(0,30))}" | "${esc(String(got[0].pinyin).slice(0,30))}" | "${esc(String(got[0].meaning).slice(0,40))}" | ${got[0].sound?`[sound:${esc(got[0].sound)}]`:'no audio'}`)}
   }catch(err){status.push(`❌ ${f.name}: ${err.message}`)}}
   $('import-status').innerHTML=status.join('<br>');
-  renderDeckbar();statsView();
-  await saveAll();
-  if(notes.length)idler();
-  else{$('stage-lbl').textContent='no decks loaded'}}
+  saveAll();
+  showHome();}
 $('file-in').onchange=e=>{const files=[...e.target.files];e.target.value='';importFiles(files)};
 let dragDepth=0;
 window.addEventListener('dragenter',e=>{e.preventDefault();dragDepth++;$('drop-overlay').classList.add('show')});
@@ -643,9 +694,10 @@ setInterval(()=>{if(cur&&(stage===0||stage===1)&&progress[cur.id]&&(progress[cur
 window.addEventListener('load',async()=>{speechSynthesis.onvoiceschanged=()=>pickVoice();
   try{await getSQL()}catch(e){}
   $('boot').style.display='none';
-  loadBuild();setInterval(renderBuild,30000);statsView();
+  loadBuild();setInterval(renderBuild,30000);
   const restored=await loadStored();
-  if(restored){renderDeckbar();statsView();idler()}});
+  showHome();
+  if(restored)statsView()});
 document.addEventListener('click',function prime(){document.removeEventListener('click',arguments.callee);
   try{const u=new SpeechSynthesisUtterance(' ');u.volume=0;speechSynthesis.speak(u)}catch(e){}},{once:true});
 </script>
