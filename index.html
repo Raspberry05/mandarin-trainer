@@ -66,6 +66,10 @@ hr{border:none;border-top:1px solid var(--bd);margin:8px 0}
 .row input[type=number],.row input[type=text],.row select{width:170px}
 footer{position:fixed;bottom:0;left:0;right:0;background:rgba(20,26,35,.85);backdrop-filter:blur(10px);border-top:1px solid var(--bd);padding:10px 16px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
 .hz-only{font-size:15px;color:var(--dim)}
+.sw{cursor:help;border-bottom:1px dotted var(--acc);position:relative}
+.sw:hover{color:var(--acc)}
+.sw:hover::after{content:attr(data-t);position:absolute;left:50%;top:calc(100% + 6px);transform:translateX(-50%);background:var(--panel);border:1px solid var(--acc);color:var(--fg);border-radius:10px;padding:8px 12px;font-size:15px;white-space:nowrap;z-index:20;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.word-chips{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
 @media(max-width:640px){#cardbox{padding:28px 18px}.hz{font-size:52px}.py{font-size:36px}.meaning{font-size:21px}}
 </style>
 </head>
@@ -197,7 +201,8 @@ const today=()=>new Date().toISOString().slice(0,10);
 function rollCounts(){const t=today();if(counts.d!==t){counts={d:t,n:0,r:0};save(LS.c,counts);}}
 function statsView(){rollCounts();
   const live=notes.filter(n=>decksOn[n.deckId]&&!progress[n.id]?.leech);
-  const due=live.filter(n=>isDue(n.id)).length;
+  const due=live.filter(n=>isDue(n.id)).length+
+    live.filter(n=>{const sp=progress['S'+n.id];return sp&&sp.due<=Date.now()}).length;
   const newLeft=live.filter(n=>!progress[n.id]).length;
   const nLeft=Math.max(0,Math.min(settings.newday,Math.max(0,settings.newday-counts.n)));
   $('st-new').textContent=counts.n+'/'+settings.newday;
@@ -326,13 +331,14 @@ function buildQueue(){
   if(settings.revsrt.startsWith('Random'))rev.sort(()=>Math.random()-.5);
   else rev.sort((a,b)=>(progress[a.id].due-progress[b.id].due)+(Math.random()-.5)*10);
   const revN=rev.slice(0,settings.maxrev);
+  const sentDue=live.filter(n=>{const sp=progress['S'+n.id];return sp&&sp.due<=Date.now()});
   let head=[],newQ=[];
   const act=activeNote();
   if(act){const S=act.sHz||act.sMean;
     const words=live.filter(n=>n.hanzi&&S.includes(n.hanzi)&&(!progress[n.id]||progress[n.id].state==='new'));
-    if(!words.length&&!act.sentDone&&sentReady(act))head=[{sentNote:act}];
+    if(!words.length&&!progress['S'+act.id]&&sentReady(act))head=[{sentNote:act}];
     else newQ=words.sort((a,b)=>(a.k||0)-(b.k||0)||(a.id<b.id?-1:1)).slice(0,Math.max(0,Math.min(settings.newday,settings.newday-counts.n)))}
-  let q=settings.newafter?[...head,...revN,...newQ]:[...head,...newQ,...revN];
+  let q=settings.newafter?[...head,...revN,...sentDue,...newQ]:[...head,...newQ,...revN,...sentDue];
   // bury siblings: same hanzi only once per session (sent items keyed separately)
   const seen=new Set();
   q=q.filter(n=>{const k=n.sentNote?'S'+n.sentNote.id:normHz(n.hanzi);if(seen.has(k))return false;seen.add(k);return true});
@@ -399,7 +405,8 @@ function idler(){queue=buildQueue();if(!queue.length){
     cur=null;statsView();return}
   route()}
 function route(){const e=queue[0];
-  if(e&&e.sentNote){cur=e.sentNote;showSentQ(null);return}
+  if(e&&e.sentNote){cur=e.sentNote;
+    progress['S'+cur.id]?showSentTest():showSentQ();return}
   cur=e;
   const isNew=!progress[cur.id]||progress[cur.id].state==='new';
   if(isNew){const act=activeNote();
@@ -408,15 +415,37 @@ function route(){const e=queue[0];
   showWordTest()}
 const sHzHas=n=>!!(n.sHz||n.sMean);
 const sentSeen=new Set();
+function showSentQ(){stage=5;$('stage-lbl').textContent='sentence — first practice';
+  setPrompt(`<div class="hint">how do you say this sentence?</div>
+    <div class="meaning" style="font-size:27px;color:#e8edf3">${esc(cur.sMean||cur.sHz)}</div>
+    <div class="hint">you know every word in it. say the whole sentence aloud.</div>`);
+  $('feedback').textContent='';$('feedback').className='';
+  setActions(btn('✅ I said it','g-next',()=>showSentR(null),'enter'),
+    btn('👀 Show me','g-hard',()=>showSentR(null)))}
 function fullView(note){const iu=note.img&&mediaMap[String(note.img).toLowerCase()];
   return `<div class="py">${esc(note.pinyin)||'<span class="hint">(no pinyin)</span>'}</div>
     <div class="hz">${esc(note.hanzi)}</div>
     ${iu?`<img class="note-img" src="${iu}" alt="">`:''}
     <div class="meaning">${esc(note.meaning)}</div>`}
+function sentHtml(n){const S=n.sHz||n.hanzi||'';
+  const cand=notes.filter(m=>m.hanzi&&m.hanzi.length>1);
+  let html='';let i=0;
+  while(i<S.length){let hit=null;
+    for(const m of cand){if(S.startsWith(m.hanzi,i)&&(!hit||m.hanzi.length>hit.hanzi.length))hit=m}
+    if(hit){html+=`<span class="sw" data-t="${esc(hit.pinyin)} · ${esc(hit.meaning)}">${esc(hit.hanzi)}</span>`;i+=hit.hanzi.length}
+    else{html+=esc(S[i]);i++}}
+  return html}
+function sentWords(n){const S=n.sHz||'';const seen=new Set();const out=[];
+  const c=[...notes].sort((a,b)=>(b.hanzi.length-a.hanzi.length));
+  let rest=S;
+  for(const m of notes){if(!m.hanzi||m.hanzi.length<2||seen.has(m.hanzi))continue;
+    if(rest.includes(m.hanzi)){seen.add(m.hanzi);out.push(m);rest=rest.split(m.hanzi).join('')}
+    if(!rest)break}
+  return out}
 function sentView(note){const su=note.sSound&&soundUrl({sound:note.sSound});
   const iu=note.img&&mediaMap[String(note.img).toLowerCase()];
   return `${iu?`<img class="note-img" src="${iu}" alt="">`:''}
-    <div class="hz" style="font-size:30px">${esc(note.sHz)}</div>
+    <div class="hz" style="font-size:30px">${sentHtml(note)}</div>
     <div class="py" style="font-size:22px">${esc(note.sPy)}</div>
     <div class="meaning">${esc(note.sMean)}</div>
     ${su?'':'<div class="hint">⚠ no sentence audio — TTS</div>'}`}
@@ -465,34 +494,61 @@ function testReveal(known){stage=3;
   playAudio(cur);
   setActions(btn('🔊 Replay',null,()=>playAudio(cur),'space'),
     btn('Continue →','primary',()=>finish(known?2:0),'enter'))}
-function showSentQ(known){stage=5;$('stage-lbl').textContent=known==null?'sentence practice':'sentence — put it together';
+function gradeSent(known){const id='S'+cur.id;
+  const p=progress[id]||(progress[id]={state:'review',step:0,due:0,ivl:2,ease:2.5});
+  if(known){p.ivl=Math.min(settings.maxivl,Math.round(p.ivl*1.9));p.due=Date.now()+p.ivl*864e5}
+  else{p.ivl=Math.max(1,Math.round(p.ivl*0.4));p.due=Date.now()+5*60e3}
+  persist();statsView()}
+function showSentTest(){stage=4;$('stage-lbl').textContent='sentence review — do you still know it?';
   setPrompt(`<div class="hint">how do you say this sentence?</div>
     <div class="meaning" style="font-size:27px;color:#e8edf3">${esc(cur.sMean||cur.sHz)}</div>
-    <div class="hint">you know every word in it. say the whole sentence aloud.</div>`);
+    <div class="hint">say it aloud. hover shows word meanings only on reveal.</div>`);
   $('feedback').textContent='';$('feedback').className='';
-  setActions(btn('✅ I said it','g-next',()=>showSentR(known),'enter'),
-    btn('👀 Show me','g-hard',()=>showSentR(known)))}
-function showSentR(known){stage=6;
-  setPrompt(sentView(cur)+
-    (known==null?'<div class="hint">practice — comes back with reviews</div>'
-      :(known?'<div class="hint">nice — word graded Good</div>'
-             :'<div class="hint">practice only — the word test decides your grade</div>')));
+  setActions(btn('✅ I know it','g-next',()=>{gradeSent(true);sentRevealDone()},'enter'),
+    btn('❌ I don\'t know','g-again',()=>{gradeSent(false);showSentFail()}))}
+function sentRevealDone(){stage=5;
+  setPrompt(sentView(cur)+`<div class="hint">sentence passed — next review later, Anki-style</div>`);
   playSent();
   setActions(btn('🔊 Replay',null,playSent,'space'),
-    known==null?btn('Next →','primary',advance,'enter')
-               :btn('Continue →','primary',()=>finish(known?2:0),'enter'))}
+    btn('Next →','primary',advance,'enter'))}
+function showSentFail(){stage=6;$('stage-lbl').textContent='sentence forgotten — relearn the words';
+  const ws=sentWords(cur);
+  setPrompt(`<div class="hint">tap any word you don't remember to review its meaning:</div>
+    <div class="hz" style="font-size:36px;line-height:1.7">${sentHtml(cur)}</div>
+    <div class="meaning">${esc(cur.sMean)}</div>
+    ${ws.length?`<div class="word-chips">${ws.map(m=>`<button class="chip" data-w="${esc(m.id)}">${esc(m.hanzi)}</button>`).join('')}</div>`:''}
+    <div class="hint">hover the underlined words above too — tap chips for the full card.</div>`);
+  $('feedback').textContent='';$('feedback').className='';
+  [...$('prompt').querySelectorAll('button[data-w]')].forEach(b=>{
+    const m=notes.find(x=>x.id===b.dataset.w);if(m)b.onclick=()=>showWordCard(m,showSentFail)});
+  setActions(...[...ws.slice(0,8).map(m=>btn(m.hanzi,null,()=>showWordCard(m))),
+    btn('🔁 Try the sentence again','primary',showSentRetest,'enter')])}
+function showWordCard(m,back){setPrompt(fullView(m)+
+    (m.sHz?`<hr style="border-color:var(--bd);width:100%"><div class="hz" style="font-size:26px">${sentHtml(m)}</div><div class="meaning">${esc(m.sMean)}</div>`:''));
+  playAudio(m);
+  setActions(btn('🔊 Word',null,()=>playAudio(m),'space'),
+    m.sSound?btn('🔊 Its sentence',null,()=>playSent(m)):null,
+    btn('← Back','primary',back||showSentFail,'enter'))}
+function showSentRetest(){stage=7;$('stage-lbl').textContent='sentence — try again';
+  setPrompt(`<div class="hint">one more time — how do you say:</div>
+    <div class="meaning" style="font-size:27px;color:#e8edf3">${esc(cur.sMean||cur.sHz)}</div>`);
+  $('feedback').textContent='';$('feedback').className='';
+  setActions(btn('✅ I know it','g-next',()=>{gradeSent(true);sentRevealDone()},'enter'),
+    btn('👀 Show me','g-hard',()=>showSentR(null)),
+    btn('❌ Still no','g-again',()=>{gradeSent(false);showSentFail()}))}
 function finish(action){grade(action);
   const p=progress[cur.id];
-  if(p&&p.state==='review'&&!p.sentDone&&sentReady(cur)){
-    p.sentDone=true;persist();
+  if(p&&p.state==='review'&&!progress['S'+cur.id]&&sentReady(cur)){
     queue.splice(Math.min(3,queue.length),0,{sentNote:cur})}
   queue.shift();stage=0;
   const extra=liveNotes().filter(n=>isDue(n.id)&&!queue.includes(n)).slice(0,50);
   queue.unshift(...extra);
   if(!queue.length){idler();return}route()}
 function advance(){const e=queue[0];
-  if(e&&e.sentNote){const p=progress[e.sentNote.id];
-    if(p&&!p.sentDone){p.sentDone=true;persist()}}
+  if(e&&e.sentNote){const sid='S'+e.sentNote.id;
+    if(!progress[sid]){progress[sid]={state:'review',step:0,due:Date.now()+2*864e5,ivl:2,ease:2.5};
+      const wp=progress[e.sentNote.id];if(wp&&!wp.sentDone){wp.sentDone=true}
+      persist()}}
   queue.shift();stage=0;
   if(!queue.length){idler();return}route()}
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
