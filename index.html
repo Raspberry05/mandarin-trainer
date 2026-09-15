@@ -209,7 +209,12 @@ async function saveAll(){try{
     t.oncomplete=()=>res();t.onerror=()=>rej(t.error)})}catch(e){}}
 async function loadBundled(){
   const off=load(LS.bdo,[]).map(String);
-  try{const r=await fetch('data/mandarin.json');if(!r.ok)throw 0;const j=await r.json();
+  let j=null;
+  for(let i=0;i<3&&!j;i++){
+    try{const r=await fetch('data/mandarin.json?v='+BUILD_DATE,{cache:'no-store'});if(!r.ok)throw new Error('http '+r.status);j=await r.json()}
+    catch(e){if(i<2)await new Promise(res=>setTimeout(res,1500))}}
+  if(!j){$('import-status').innerHTML='⚠ bundled curricula failed to load — check connection, or import an .apkg manually';return 0}
+  try{
     let added=0;
     // migration: purge legacy per-file bundled ids (hsk15/hsk6) replaced by combined 'mz'
     const legacy=notes.filter(n=>n.id.startsWith('bhsk15')||n.id.startsWith('bhsk6'));
@@ -223,6 +228,7 @@ async function loadBundled(){
         sHz:n.sh||'',sPy:n.sp||'',sMean:n.sm||'',sSound:'',img:'',sound:''});
       added++}
     if(added||legacy.length){sentSeen.clear();saveAll()}
+    if(added)$('import-status').innerHTML=`✅ bundled curriculum loaded: +${added} cards`;
     return added}catch(e){return 0}}
 async function loadStored(){try{const db=await idb();
   const arr=await new Promise((res,rej)=>{const t=db.transaction('notes','readonly');
@@ -678,7 +684,7 @@ function closeSettings(){readSettings();statsView();$('settings-modal').classLis
 
 /* ---------- build info ---------- */
 let lastCommit=null;
-const BUILD_DATE=1789439836;
+const BUILD_DATE=1789440485;
 function relTime(t){const s=(Date.now()-t)/1000;
   if(s<60)return Math.max(0,Math.floor(s))+'s ago';
   if(s<3600)return Math.floor(s/60)+'m ago';
@@ -760,7 +766,7 @@ window.addEventListener('load',async()=>{speechSynthesis.onvoiceschanged=()=>pic
   await loadStored();
   showHome();
   const added=await loadBundled();
-  if(added)showHome()});
+  showHome()});
 document.addEventListener('click',function prime(){document.removeEventListener('click',arguments.callee);
   try{const u=new SpeechSynthesisUtterance(' ');u.volume=0;speechSynthesis.speak(u)}catch(e){}},{once:true});
 </script>
