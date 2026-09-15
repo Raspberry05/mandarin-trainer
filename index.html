@@ -330,7 +330,7 @@ function renderDeckbar(){const ids=[...new Set(notes.map(n=>n.deckId))];
   for(const d of ids){const c=document.createElement('span');
     c.className='chip'+(decksOn[d]?' on':'');
     c.textContent=(decksOn[d]?'✓ ':'')+d+' ('+notes.filter(n=>n.deckId===d).length+')';
-    c.onclick=()=>{decksOn[d]=!decksOn[d];saveSettings();renderDeckbar();statsView()};bar.appendChild(c)}}
+    c.onclick=()=>{decksOn[d]=!decksOn[d];saveSettings();renderDeckbar();statsView();idler()};bar.appendChild(c)}}
 function btn(label,cls,fn,key){const b=document.createElement('button');
   b.textContent=label;if(cls)b.className=cls;if(key)b.dataset.key=key;b.onclick=fn;return b}
 function setActions(...bs){const a=$('actions');a.innerHTML='';bs.forEach(b=>a.appendChild(b))}
@@ -422,10 +422,12 @@ async function importFiles(files){const status=[];
     if(/\.apkg$|\.colpkg$/i.test(f.name)){const res=await importApkg(f,prog);got=res.notes;report=res.report}
     else got=importTsv(await f.text(),f.name);
     if(!got.length){status[status.length-1]=`⚠️ ${f.name}: 0 notes found (empty or wrong format)`;continue}
-    const stubs=got.filter(n=>/update to the latest anki|import the .colpkg\/.apkg/i.test(n.hanzi+' '+n.meaning));
+    const isStub=n=>/please update to the latest anki version|import the .colpkg\/\.apkg file again/i.test(n.hanzi+' '+n.meaning);
+    const stubs=got.filter(isStub);
     if(stubs.length&&stubs.length===got.length){
-      status[status.length-1]=`❌ ${f.name}: this is a STUB package (placeholder note, no vocabulary). Re-download the real deck from AnkiWeb via Anki Desktop 24+, or use another deck.`;continue}
-    if(stubs.length)got=got.filter(n=>!(/update to the latest anki|import the .colpkg\/.apkg/i.test(n.hanzi+' '+n.meaning)));
+      status[status.length-1]=`❌ ${f.name}: STUB package (${stubs.length}/${got.length} notes are placeholders). Sample: "${esc(String(got[0].hanzi).slice(0,90))}". AnkiWeb gave a pointer file — re-download the real deck via Anki Desktop 24+. Nothing imported.`;continue}
+    if(stubs.length){got=got.filter(n=>!isStub(n));
+      status.push(`&nbsp;&nbsp;↳ filtered ${stubs.length} placeholder notes`)}
     const gids=new Set(got.map(n=>n.deckId));gids.forEach(g=>{if(!(g in decksOn))decksOn[g]=true});
     notes=notes.filter(n=>!gids.has(n.deckId)).concat(got);
     const mediaN=Object.keys(mediaMap).length;
