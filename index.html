@@ -44,6 +44,10 @@ main{max-width:860px;margin:0 auto;padding:24px 20px 90px}
 .hz.hidden-h{filter:blur(12px);user-select:none}
 .meaning{font-size:24px;color:#d6dde6}
 .note-img{max-width:100%;max-height:300px;border-radius:14px;border:1px solid var(--bd);box-shadow:0 6px 24px rgba(0,0,0,.3)}
+.fb-img{display:flex;align-items:center;justify-content:center;min-height:180px;padding:20px;
+  background:linear-gradient(135deg,hsl(var(--h),45%,22%),hsl(var(--h),55%,12%));overflow:hidden}
+.fb-img span{font-size:64px;color:hsl(var(--h),70%,78%);letter-spacing:8px;text-align:center;
+  text-shadow:0 2px 18px rgba(0,0,0,.5);word-break:break-all;line-height:1.2}
 .hint{color:var(--dim);font-size:14px}
 #answer-in{font-size:22px;width:100%;max-width:460px;text-align:center;padding:12px}
 .btnrow{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
@@ -255,7 +259,8 @@ async function loadStored(){try{const db=await Promise.race([idb(),
 /* ---------- helpers ---------- */
 const $=id=>document.getElementById(id);
 const today=()=>new Date().toISOString().slice(0,10);
-function rollCounts(){const t=today();if(counts.d!==t){counts={d:t,n:{},r:{}};save(LS.c,counts);}}
+function rollCounts(){const t=today();counts.s=counts.s||{};
+  if(counts.d!==t){counts={d:t,n:{},r:{},s:{}};save(LS.c,counts);}}
 function statsView(){rollCounts();
   const live=notes.filter(n=>decksOn[n.deckId]&&!progress[n.id]?.leech);
   const due=live.filter(n=>isDue(n.id)).length+
@@ -297,6 +302,14 @@ function soundUrl(note){if(!note.sound)return null;
 function imgSrc(note){if(!note.img)return null;
   if(String(note.img).startsWith('data/'))return note.img;
   return mediaMap[String(note.img).toLowerCase()]||null}
+function fallbackArt(note){const hz=(note.sHz||note.hanzi||'?').slice(0,6);
+  let hash=0;for(const c of String(note.id))hash=(hash*31+c.charCodeAt(0))>>>0;
+  const e=FB_EMOJI[hz]||FB_EMOJI[hz.slice(0,2)]||FB_EMOJI[hz.slice(0,1)]||'';
+  return `<div class="note-img fb-img" style="--h:${hash%360}"><span>${e?e+'<br>':''}${esc(hz)}</span></div>`}
+const FB_EMOJI={'我':'🧍','你':'🫵','他':'🧑','她':'👩','我们':'👥','他们':'👥','好':'👍','不':'🚫','是':'✅','很':'👌','吃':'🍚','喝':'🥤','水':'💧','看':'👀','听':'👂','说':'🗣️','读':'📖','写':'✍️','学':'🎓','学生':'🧑‍🎓','老师':'👩‍🏫','工作':'💼','买':'🛒','钱':'💰','电话':'📞','手机':'📱','电脑':'💻','爱':'❤️','喜欢':'💕','高兴':'😀','难过':'😢','生气':'😠','累':'😪','家':'🏠','房子':'🏡','学校':'🏫','医院':'🏥','商店':'🏪','火车':'🚄','飞机':'✈️','出租车':'🚕','跑':'🏃','睡觉':'😴','睡':'😴','起床':'⏰','早上':'🌅','晚上':'🌙','今天':'📅','明天':'📆','时间':'🕐','猫':'🐱','狗':'🐶','朋友':'🫂','孩子':'🧒','爸爸':'👨','妈妈':'👩'};
+addEventListener('error',e=>{const t=e.target;
+  if(t&&t.tagName==='IMG'&&t.classList.contains('note-img'))
+    t.outerHTML=fallbackArt({hanzi:t.dataset.hz||'?',id:t.src||'x'})},true);
 function playSound(note){const m=soundUrl(note);
   if(m){const a=new Audio(m);a.play().catch(()=>tts(note.hanzi));return true}
   return false}
@@ -362,7 +375,7 @@ async function importApkg(file,onProg){const zip=await JSZip.loadAsync(file);
     const ish=idx(/sentencesimpl/,10);
     const isp=idx(/sentencepinyin/,14);
     const ism=idx(/sentencemeaning/,16);
-    const iss=names.findIndex(n=>/sentenceaudio/.test(n));
+    const iss=names.findIndex(n=>/sent(ence)?[\s_-]*audio/.test(n));
     const sSound=iss>=0?(rawVals[iss].match(/\[sound:([^\]]+)\]/i)||[])[1]:null;
     if(!modelReport[mid])modelReport[mid]={model:m.name,hanzi:names[ih]||`#${ih}`,pinyin:names[ip]||`#${ip}`,meaning:names[im]||`#${im}`,audio:names[ia]||null,used:false};
     modelReport[mid].used=true;
@@ -521,18 +534,24 @@ function idler(){if(idleTimer){clearInterval(idleTimer);idleTimer=null}
       for(const m of notes){if(!m.hanzi||seen.has(m.hanzi))continue;seen.add(m.hanzi);
         const st=progress[m.id]?.state;
         if(S.includes(m.hanzi)&&(st==='learn'||st==='relearn'))left++}
-      goal=`<br><br>🎯 current goal: <b>${esc(act.sMean||act.sHz)}</b><br><span class="hint">${left? left+' word(s) in learning steps — auto-resuming when their timer hits' : 'waiting on learning-step timers (≤2 min) — or skip the gate below'}.</span>`}
+    goal=`<br><br>🎯 current goal: <b>${esc(act.sMean||act.sHz)}</b><br><span class="hint">${left? left+' word(s) in learning steps — auto-resuming when their timer hits' : 'waiting on learning-step timers (≤2 min)'}.</span>`}
     $('stage-lbl').textContent='all caught up';
     setPrompt('<span class="hint">'+(act?'Caught up.':'No cards due. Import more decks on the home screen.')+goal+'</span>');
-    setActions(...[act?btn('⏭ Skip gate — next sentence','g-hard',skipGate):null,
+    setActions(...[act?btn('🛑 Enough for today','g-again',showHome):null,
+      act?btn('▶ Continue to next sentence','primary',skipGateCore,'enter'):null,
+      act?btn('📚 Review past sentences',null,reviewPast):null,
       btn('🔄 Rebuild queue',null,idler)].filter(Boolean));
     cur=null;statsView();
     idleTimer=setInterval(idler,5000);return}
   route()}
-function skipGate(){const act=activeNote();if(!act)return;
-  if(!confirm('Skip this sentence gate? The next sentence starts now; this one returns in 2 days.'))return;
+function skipGateCore(){const act=activeNote();if(!act)return;
   const p=pOf(act.id);p.sentDone=true;p.skipped=true;p.state='review';p.ivl=Math.max(1,p.ivl||2);
   p.due=Date.now()+2*864e5;persist();idler()}
+function reviewPast(){const live=liveNotes();
+  const past=live.filter(n=>progress['S'+n.id])
+    .sort((a,b)=>(progress['S'+a.id].due||0)-(progress['S'+b.id].due||0));
+  if(!past.length){alert('No sentences learned yet.');return}
+  queue=past.map(n=>({sentNote:n}));route()}
 function route(){const e=queue[0];
   if(e&&e.sentNote){cur=e.sentNote;
     progress['S'+cur.id]?showSentTest():showSentQ();return}
@@ -554,7 +573,7 @@ function showSentQ(){stage=5;$('stage-lbl').textContent='sentence — first prac
 function fullView(note){const iu=imgSrc(note);
   return `<div class="py">${esc(note.pinyin)||'<span class="hint">(no pinyin)</span>'}</div>
     <div class="hz">${esc(note.hanzi)}</div>
-    ${iu?`<img class="note-img" src="${iu}" alt="">`:''}
+    ${iu?`<img class="note-img" src="${iu}" data-hz="${esc(note.hanzi||'')}" alt="">`:fallbackArt(note)}
     <div class="meaning">${esc(note.meaning)}</div>`}
 function sentHtml(n){const S=n.sHz||n.hanzi||'';
   const cand=notes.filter(m=>m.hanzi&&m.hanzi.length>1);
@@ -573,7 +592,7 @@ function sentWords(n){const S=n.sHz||'';const seen=new Set();const out=[];
   return out}
 function sentView(note){const su=note.sSound&&soundUrl({sound:note.sSound});
   const iu=imgSrc(note);
-  return `${iu?`<img class="note-img" src="${iu}" alt="">`:''}
+  return `${iu?`<img class="note-img" src="${iu}" data-hz="${esc(note.hanzi||'')}" alt="">`:fallbackArt(note)}
     <div class="hz" style="font-size:30px">${sentHtml(note)}</div>
     <div class="py" style="font-size:22px">${esc(note.sPy)}</div>
     <div class="meaning">${esc(note.sMean)}</div>
@@ -598,7 +617,7 @@ function showSentIntro(){const A=activeNote()||cur;stage=0;$('stage-lbl').textCo
     <div class="hz" style="font-size:34px">${esc(A.sHz)}</div>
     <div class="py" style="font-size:26px">${esc(A.sPy)}</div>
     <div class="meaning">${esc(A.sMean)}</div>
-    ${imgSrc(A)?`<img class="note-img" src="${imgSrc(A)}" alt="">`:''}
+    ${imgSrc(A)?`<img class="note-img" src="${imgSrc(A)}" data-hz="${esc(A.hanzi||'')}" alt="">`:fallbackArt(A)}
     <div class="hint">🔊 just listen for now. then we break it down word by word.</div>`);
   $('feedback').textContent='';$('feedback').className='';
   if(!settings.noautoplay)playSent(A);
@@ -630,11 +649,12 @@ function testReveal(known){stage=3;
           :'<div class="hint">didn\'t know — graded Again, repeats soon</div>'));
   playAudio(cur);
   setActions(...[btn('🔊 Replay',null,()=>playAudio(cur),'space'),
-    btn('Continue →','primary',()=>finish(known?2:0),'enter'),
-    btn('🗑 Remove card','g-again',removeCard)].filter(Boolean))}
+    btn('Continue →','primary',()=>finish(known?2:0),'enter')].filter(Boolean))}
 function gradeSent(a){ // Again Hard Good Easy = 0 1 2 3
   const id='S'+cur.id;
+  const existed=!!progress[id];
   const p=progress[id]||(progress[id]={state:'review',step:0,due:0,ivl:2,ease:2.5});
+  if(a!==0&&!existed){counts.s=counts.s||{};const dk=studyDeck||cur.deckId;counts.s[dk]=(counts.s[dk]||0)+1}
   if(a===0){p.ivl=Math.max(1,Math.round(p.ivl*0.4));p.ease=Math.max(1.3,(p.ease||2.5)-0.2);p.due=Date.now()+5*60e3}
   else{if(a===1){p.ease=Math.max(1.3,(p.ease||2.5)-0.15);p.ivl=Math.max(1,Math.round(p.ivl*1.2))}
     else if(a===2){p.ivl=Math.max(1,Math.round(p.ivl*(p.ease||2.5)))}
@@ -676,7 +696,6 @@ function showWordCard(m,back){setPrompt(fullView(m)+
   playAudio(m);
   setActions(...[btn('🔊 Word',null,()=>playAudio(m),'space'),
     m.sSound?btn('🔊 Its sentence',null,()=>playSent(m)):null,
-    btn('🗑 Remove card','g-again',()=>{const bak=back;cur=m;removeCard()}),
     btn('← Back','primary',back||showSentFail,'enter')].filter(Boolean))}
 function showSentRetest(){stage=7;$('stage-lbl').textContent='sentence — try again';
   setPrompt(`<div class="hint">one more time — how do you say:</div>
@@ -730,7 +749,7 @@ function relTime(t){const s=(Date.now()-t)/1000;
   if(s<86400)return Math.floor(s/3600)+'h ago';
   return Math.floor(s/86400)+'d ago'}
 function renderBuild(){if(!lastCommit)return;
-  const outdated=(Date.now()-BUILD_DATE)<lastCommit.t-21600e3?' <span class="hint">(outdated — refreshing…)</span>':'';
+  const outdated=BUILD_DATE<lastCommit.t-21600e3?' <span class="hint">(outdated — refreshing…)</span>':'';
   $('build-info').innerHTML=`build <b>${lastCommit.sha}</b> · updated ${relTime(lastCommit.t)}${outdated}`;
   if(outdated&&!sessionStorage.getItem('ast_reloaded')){
     sessionStorage.setItem('ast_reloaded','1');
