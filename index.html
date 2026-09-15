@@ -36,6 +36,7 @@ main{max-width:760px;margin:0 auto;padding:20px 16px 80px}
 .hz{font-size:44px;line-height:1.3}
 .hz.hidden-h{filter:blur(10px);user-select:none}
 .meaning{font-size:20px;color:#cdd6e0}
+.note-img{max-width:100%;max-height:240px;border-radius:10px;border:1px solid #2a313b}
 .hint{color:var(--dim);font-size:13px}
 #answer-in{font-size:20px;width:100%;max-width:420px;text-align:center}
 #mic-btn.rec{border-color:var(--bad);background:#3a2226}
@@ -208,7 +209,8 @@ async function importApkg(file,onProg){const zip=await JSZip.loadAsync(file);
     const f=zip.file(num);
     if(f)try{const buf=await f.async('arraybuffer');
       const ext=((fname.match(/\.([a-z0-9]+)$/i))||[])[1]||'mp3';
-      const MIME={mp3:'audio/mpeg',m4a:'audio/mp4',m4b:'audio/mp4',mp4:'audio/mp4',aac:'audio/aac',ogg:'audio/ogg',oga:'audio/ogg',opus:'audio/ogg',wav:'audio/wav',flac:'audio/flac',webm:'audio/webm'};
+      const MIME={mp3:'audio/mpeg',m4a:'audio/mp4',m4b:'audio/mp4',mp4:'audio/mp4',aac:'audio/aac',ogg:'audio/ogg',oga:'audio/ogg',opus:'audio/ogg',wav:'audio/wav',flac:'audio/flac',webm:'audio/webm',
+        jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',gif:'image/gif',webp:'image/webp',svg:'image/svg+xml',bmp:'image/bmp',avif:'image/avif'};
       mediaMap[String(fname).toLowerCase()]=URL.createObjectURL(new Blob([buf],{type:MIME[String(ext).toLowerCase()]||'application/octet-stream'}))}catch(e){}
     if(++mi%25===0&&onProg)onProg(`extracting media ${mi}/${entries.length}`)}
   const dbFile=zip.file('collection.anki2')||zip.file('collection.anki21')||zip.file('collection.anki21b')||zip.file('collection.anki23');
@@ -257,8 +259,11 @@ async function importApkg(file,onProg){const zip=await JSZip.loadAsync(file);
     const audioIdxs=[...names.keys()].filter(i=>/\[sound:([^\]]+)\]/i.test(rawVals[i]||''));
     const sIdx=(ia>=0&&audioIdxs.includes(ia))?ia:(audioIdxs[0]??-1);
     const sound=sIdx>=0?(rawVals[sIdx].match(/\[sound:([^\]]+)\]/i)||[])[1]:null;
+    const imgM=String(flds).match(/<img[^>]+src=["']?([^"'>\s]+)/i);
+    let img=imgM?imgM[1]:null;
+    if(img){try{img=decodeURIComponent(img)}catch(e){}}
     out.push({id:'a'+id,deckId:deckOf[id]??mid,deck:decks[deckOf[id]]?.name||m.name,
-      hanzi:vals[ih]||sfld,pinyin:vals[ip]||'',meaning:vals[im]||'',sound})}
+      hanzi:vals[ih]||sfld,pinyin:vals[ip]||'',meaning:vals[im]||'',sound,img})}
   db.close();return {notes:out,report:modelReport}}
 function importTsv(text,fname){const out=[];const lines=text.split(/\r?\n/).filter(l=>l.trim());
   for(const[i,line]of lines.entries()){const cols=line.split('\t').map(clean).filter(Boolean);
@@ -342,8 +347,10 @@ function idler(){queue=buildQueue();if(!queue.length){
   cur=queue[0];
   const isNew=!progress[cur.id]||progress[cur.id].state==='new';
   isNew?showLearn():showRecall()}
-function fullView(note){return `<div class="py">${esc(note.pinyin)||'<span class="hint">(no pinyin)</span>'}</div>
+function fullView(note){const iu=note.img&&mediaMap[String(note.img).toLowerCase()];
+  return `<div class="py">${esc(note.pinyin)||'<span class="hint">(no pinyin)</span>'}</div>
     <div class="hz">${esc(note.hanzi)}</div>
+    ${iu?`<img class="note-img" src="${iu}" alt="">`:''}
     <div class="meaning">${esc(note.meaning)}</div>`}
 function audioWarn(){return (cur.sound&&!soundUrl(cur))?'<div class="hint">⚠ deck audio missing — TTS voice</div>':''}
 function showLearn(){stage=0;$('stage-lbl').textContent=`introduce — ${cur.deck}`;
