@@ -69,7 +69,6 @@ footer{position:fixed;bottom:0;left:0;right:0;background:var(--panel);border-top
 <input type="file" id="file-in" accept=".apkg,.colpkg,.txt,.csv" multiple hidden>
 <button id="import-btn">⬆ Import decks</button>
 <button id="settings-btn">⚙ Settings</button>
-<button id="test-btn">🧪 Test mode: off</button>
 </header>
 <main>
 <div id="build-info">🔧 checking build…</div>
@@ -91,7 +90,7 @@ footer{position:fixed;bottom:0;left:0;right:0;background:var(--panel);border-top
 </div>
 </main>
 <footer>
-<span class="hint">Space = replay audio · Enter = next / "I know it" · 1-4 = grade · 🧪 = meaning→recall test</span>
+<span class="hint">Space = replay audio · Enter = next / "I know it" · flow: sentence → word → test → sentence practice</span>
 </footer>
 
 <div class="modal" id="settings-modal">
@@ -152,7 +151,7 @@ let decksOn={};          // deckId -> bool
 let cur=null,stage=0,answerGiven='',timerInt=null,t0=0;
 
 const DEF={newday:9999,maxrev:9999,steps:'5s 50s 2m',relearn:'5s 50s 2m',leech:6,leechact:'Suspend Card',
-noautoplay:false,waitaudio:false,maxsec:60,newsrt:'Random',revsrt:'Due date, then random',newafter:true,ret:90,maxivl:36500,testmode:false};
+noautoplay:false,waitaudio:false,maxsec:60,newsrt:'Random',revsrt:'Due date, then random',newafter:true,ret:90,maxivl:36500};
 if(!settings){settings={...DEF};presets={'Default':{...DEF}};save(LS.pr,presets);save(LS.s,settings);}
 
 /* ---------- IndexedDB persistence (local, like Anki's col.db) ---------- */
@@ -285,6 +284,11 @@ async function importApkg(file,onProg){const zip=await JSZip.loadAsync(file);
     const ip=idx(/pinyin|roman|pron|py\b/,1);
     const im=idx(/english|meaning|transl|definition|gloss|sense/,2);
     const ia=names.findIndex(n=>/audio|sound|语音|录音|说话/.test(n));
+    const ish=idx(/sentencesimpl/,10);
+    const isp=idx(/sentencepinyin/,14);
+    const ism=idx(/sentencemeaning/,16);
+    const iss=names.findIndex(n=>/sentenceaudio/.test(n));
+    const sSound=iss>=0?(rawVals[iss].match(/\[sound:([^\]]+)\]/i)||[])[1]:null;
     if(!modelReport[mid])modelReport[mid]={model:m.name,hanzi:names[ih]||`#${ih}`,pinyin:names[ip]||`#${ip}`,meaning:names[im]||`#${im}`,audio:names[ia]||null,used:false};
     modelReport[mid].used=true;
     const sfld=vals[m.sortf||0]||'';
@@ -295,7 +299,8 @@ async function importApkg(file,onProg){const zip=await JSZip.loadAsync(file);
     let img=imgM?imgM[1]:null;
     if(img){try{img=decodeURIComponent(img)}catch(e){}}
     out.push({id:'a'+id,deckId:deckOf[id]??mid,deck:decks[deckOf[id]]?.name||m.name,
-      hanzi:vals[ih]||sfld,pinyin:vals[ip]||'',meaning:vals[im]||'',sound,img})}
+      hanzi:vals[ih]||sfld,pinyin:vals[ip]||'',meaning:vals[im]||'',sound,img,
+      sHz:vals[ish]||'',sPy:vals[isp]||'',sMean:vals[ism]||'',sSound})}
   db.close();return {notes:out,report:modelReport}}
 function importTsv(text,fname){const out=[];const lines=text.split(/\r?\n/).filter(l=>l.trim());
   for(const[i,line]of lines.entries()){const cols=line.split('\t').map(clean).filter(Boolean);
@@ -377,61 +382,72 @@ function idler(){queue=buildQueue();if(!queue.length){
     setActions(btn('🔄 Rebuild queue',null,idler));
     cur=null;statsView();return}
   cur=queue[0];
-  if(settings.testmode){showTestQ();return}
   const isNew=!progress[cur.id]||progress[cur.id].state==='new';
-  isNew?showLearn():showRecall()}
+  isNew?showListen():showWordTest()}
 function fullView(note){const iu=note.img&&mediaMap[String(note.img).toLowerCase()];
   return `<div class="py">${esc(note.pinyin)||'<span class="hint">(no pinyin)</span>'}</div>
     <div class="hz">${esc(note.hanzi)}</div>
     ${iu?`<img class="note-img" src="${iu}" alt="">`:''}
     <div class="meaning">${esc(note.meaning)}</div>`}
+function sentView(note){const su=note.sSound&&soundUrl({sound:note.sSound});
+  const iu=note.img&&mediaMap[String(note.img).toLowerCase()];
+  return `${iu?`<img class="note-img" src="${iu}" alt="">`:''}
+    <div class="hz" style="font-size:30px">${esc(note.sHz)}</div>
+    <div class="py" style="font-size:22px">${esc(note.sPy)}</div>
+    <div class="meaning">${esc(note.sMean)}</div>
+    ${su?'':'<div class="hint">⚠ no sentence audio — TTS</div>'}`}
 function audioWarn(){return (cur.sound&&!soundUrl(cur))?'<div class="hint">⚠ deck audio missing — TTS voice</div>':''}
-function showLearn(){stage=0;$('stage-lbl').textContent=`introduce — ${cur.deck}`;
-  setPrompt(fullView(cur)+audioWarn()+`<div class="hint">🔊 sound + pinyin + hanzi + meaning. absorb it.</div>`);
+function playSent(){const m=cur.sSound&&soundUrl({sound:cur.sSound});
+  if(m){new Audio(m).play().catch(()=>tts(cur.sHz))}else tts(cur.sHz||cur.hanzi)}
+function showListen(){stage=0;$('stage-lbl').textContent=`lesson — ${cur.deck}`;
+  const sent=cur.sMean||cur.sHz;
+  setPrompt((sent?`<div class="hint">goal — you'll learn to say this:</div>
+    <div class="hz" style="font-size:26px">${esc(cur.sHz)}</div>
+    <div class="meaning">${esc(cur.sMean)}</div>
+    <div class="hint">🔊 listen to the whole sentence first (button below)</div><hr style="border-color:#242b34;width:100%">`
+    :'')+
+    fullView(cur)+audioWarn()+`<div class="hint">break it down: 🔊 + pinyin + hanzi + meaning</div>`);
   $('feedback').textContent='';$('feedback').className='';
   if(!settings.noautoplay)playAudio(cur);
-  setActions(btn('🔊 Play',null,()=>playAudio(cur),'space'),
-    btn('Next →','primary',showRecall,'enter'))}
-function showRecall(){stage=1;$('stage-lbl').textContent='recall — audio only';
-  setPrompt(`<div class="prompt">🎧 what does this mean?</div>${audioWarn()}
-    <div class="hint">say the meaning aloud in your head/voice. no hints.</div>`);
-  $('feedback').textContent='';$('feedback').className='';
-  if(!settings.noautoplay)playAudio(cur);
-  startTimer();
-  setActions(btn('🔊 Play',null,()=>playAudio(cur),'space'),
-    btn('✅ I know it','g-next',()=>showGrade(true),'enter'),
-    btn('👀 Show me','g-hard',()=>showGrade(false)))}
-function showGrade(known){stage=2;stopTimer();
-  setPrompt(fullView(cur)+audioWarn()+
-    (known?'<div class="hint">you said you knew it — grade honestly</div>'
-          :'<div class="hint">didn\'t know it — this repeats soon (learning steps)</div>'));
-  playAudio(cur);
-  setActions(btn('🔁 Test again','g-next',showRecall),
-    btn('Again','g-again',()=>finish(0),'1'),
-    btn('Hard','g-hard',()=>finish(1),'2'),
-    btn('Good','g-good',()=>finish(2),'3'),
-    btn('Easy','g-easy',()=>finish(3),'4'))}
-function finish(action){grade(action);queue.shift();stage=0;
-  const extra=liveNotes().filter(n=>isDue(n.id)&&!queue.includes(n)).slice(0,50);
-  queue.unshift(...extra);
-  if(!queue.length){idler();return}cur=queue[0];
-  if(settings.testmode){showTestQ();return}
-  const isNew=!progress[cur.id]||progress[cur.id].state==='new';
-  isNew?showLearn():showRecall()}
-function showTestQ(){stage=1;$('stage-lbl').textContent='test — meaning → how do you say it?';
+  setActions(...[btn('🔊 Word',null,()=>playAudio(cur),'space'),
+    sent?btn('🔊 Sentence',null,playSent):null,
+    btn('Test me →','primary',showWordTest,'enter')].filter(Boolean))}
+function showWordTest(){stage=1;$('stage-lbl').textContent='test — how do you say it?';
   setPrompt(`<div class="hint">how do you say this in Mandarin?</div>
     <div class="meaning" style="font-size:28px;color:#e8edf3">${esc(cur.meaning)}</div>
-    <div class="hint">say it aloud — then judge yourself. no hints shown.</div>`);
+    <div class="hint">say it aloud — then judge yourself. no hints.</div>`);
   $('feedback').textContent='';$('feedback').className='';
   setActions(btn('✅ I know it','g-next',()=>testReveal(true),'enter'),
     btn('❌ I don\'t know','g-again',()=>testReveal(false)))}
 function testReveal(known){stage=2;
+  const sent=cur.sMean||cur.sHz;
   setPrompt(fullView(cur)+audioWarn()+
     (known?'<div class="hint">knew it — graded Good, next review pushed out</div>'
           :'<div class="hint">didn\'t know — graded Again, repeats soon</div>'));
   playAudio(cur);
-  setActions(btn('🔊 Replay',null,()=>playAudio(cur),'space'),
+  setActions(...[btn('🔊 Replay',null,()=>playAudio(cur),'space'),
+    sent?btn('🗣️ Sentence practice →','g-hard',()=>showSentQ(known)):null,
+    btn('Continue →','primary',()=>finish(known?2:0),'enter')].filter(Boolean))}
+function showSentQ(known){stage=3;$('stage-lbl').textContent='sentence practice';
+  setPrompt(`<div class="hint">now build the sentence — how do you say:</div>
+    <div class="meaning" style="font-size:26px;color:#e8edf3">${esc(cur.sMean||'')}</div>
+    <div class="hint">you know the parts. say the whole sentence aloud.</div>`);
+  $('feedback').textContent='';$('feedback').className='';
+  setActions(btn('✅ I said it','g-next',()=>showSentR(known),'enter'),
+    btn('👀 Show me','g-hard',()=>showSentR(known)))}
+function showSentR(known){stage=4;
+  setPrompt(sentView(cur)+
+    (known?'<div class="hint">nice — word graded Good either way</div>'
+          :'<div class="hint">sentence is practice — only the word test grades</div>'));
+  playSent();
+  setActions(btn('🔊 Replay',null,playSent,'space'),
     btn('Continue →','primary',()=>finish(known?2:0),'enter'))}
+function finish(action){grade(action);queue.shift();stage=0;
+  const extra=liveNotes().filter(n=>isDue(n.id)&&!queue.includes(n)).slice(0,50);
+  queue.unshift(...extra);
+  if(!queue.length){idler();return}cur=queue[0];
+  const isNew=!progress[cur.id]||progress[cur.id].state==='new';
+  isNew?showListen():showWordTest()}
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 
 /* ---------- settings UI ---------- */
@@ -500,8 +516,6 @@ window.addEventListener('dragleave',e=>{dragDepth--;if(dragDepth<=0){dragDepth=0
 window.addEventListener('drop',e=>{e.preventDefault();dragDepth=0;$('drop-overlay').classList.remove('show');
   if(e.dataTransfer?.files?.length)importFiles([...e.dataTransfer.files])});
 $('settings-btn').onclick=openSettings;
-$('test-btn').onclick=()=>{settings.testmode=!settings.testmode;saveSettings();
-  $('test-btn').textContent='🧪 Test mode: '+(settings.testmode?'ON':'off');idler()};
 $('settings-close').onclick=closeSettings;
 $('deck-close').onclick=()=>$('deck-modal').classList.remove('open');
 $('preset-save').onclick=()=>{const n=$('s-pname').value.trim()||'Default';
@@ -521,7 +535,6 @@ setInterval(()=>{if(cur&&(stage===0||stage===1)&&progress[cur.id]&&(progress[cur
 window.addEventListener('load',async()=>{speechSynthesis.onvoiceschanged=()=>pickVoice();
   try{await getSQL()}catch(e){}
   $('boot').style.display='none';
-  $('test-btn').textContent='🧪 Test mode: '+(settings.testmode?'ON':'off');
   loadBuild();setInterval(renderBuild,30000);statsView();
   const restored=await loadStored();
   if(restored){renderDeckbar();statsView();idler()}});
