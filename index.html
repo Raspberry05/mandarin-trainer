@@ -79,7 +79,10 @@ footer{position:fixed;bottom:0;left:0;right:0;background:rgba(20,26,35,.85);back
 .deckcard h3{margin:0 0 10px;font-size:17px;color:var(--fg);word-break:break-all}
 .deckcard .dmeta{color:var(--dim);font-size:13.5px;line-height:1.7}
 .deckcard .dmeta b{color:var(--acc)}
-.deckcard .dreset{position:absolute;top:12px;right:12px;padding:5px 10px;font-size:12px;border-radius:8px}
+.dbtns{position:absolute;top:12px;right:12px;display:flex;gap:6px}
+.langtag{font-size:12px;color:var(--acc);font-weight:400}
+.dreset{padding:5px 10px;font-size:12px;border-radius:8px}
+.deckcard .dx{color:#ff7b72}
 .ddesc{color:var(--dim);font-size:12.5px;margin-top:10px;border-top:1px solid var(--bd);padding-top:8px;line-height:1.5}
 @media(max-width:640px){#cardbox{padding:28px 18px}.hz{font-size:52px}.py{font-size:36px}.meaning{font-size:21px}}
 </style>
@@ -91,7 +94,7 @@ footer{position:fixed;bottom:0;left:0;right:0;background:rgba(20,26,35,.85);back
 <button id="back-btn" style="display:none">‹ Home</button>
 <input type="file" id="file-in" accept=".apkg,.colpkg,.txt,.csv" multiple hidden>
 <button id="settings-btn">⚙ Settings</button>
-<button id="reset-card-btn" title="Erase this card's progress and learn it fresh">♻ Restart card</button>
+<button id="reset-card-btn" title="Erase ALL progress for this deck and start over">♻ Reset deck</button>
 </header>
 <main>
 <div id="home-view">
@@ -167,7 +170,7 @@ footer{position:fixed;bottom:0;left:0;right:0;background:rgba(20,26,35,.85);back
 <script>
 "use strict";
 /* ---------- storage ---------- */
-const LS={p:'ast_progress',s:'ast_settings',pr:'ast_presets',c:'ast_counts'};
+const LS={p:'ast_progress',s:'ast_settings',pr:'ast_presets',c:'ast_counts',bdo:'ast_bundled_off'};
 const load=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}};
 const save=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
 let progress=load(LS.p,{});
@@ -202,6 +205,20 @@ async function saveAll(){try{
   await new Promise((res,rej)=>{const t=db.transaction('media','readwrite');const s=t.objectStore('media');s.clear();
     for(const[name,blob]of Object.entries(mediaBlobs))s.put(blob,name);
     t.oncomplete=()=>res();t.onerror=()=>rej(t.error)})}catch(e){}}
+async function loadBundled(){
+  const off=load(LS.bdo,[]).map(String);
+  try{const r=await fetch('data/mandarin.json');if(!r.ok)throw 0;const j=await r.json();
+    let added=0;
+    const decks={};for(const d of j.decks)decks[d.id]=d;
+    for(const n of j.notes){const d=j.decks[n.d];
+      if(!d||off.includes(String(d.id)))continue;
+      if(notes.some(x=>x.id===n.id))continue;
+      notes.push({id:n.id,deckId:d.id,deck:d.name,lang:d.lang,desc:d.desc,
+        hanzi:n.h,pinyin:n.p||'',meaning:n.m||'',k:n.k||0,
+        sHz:n.sh||'',sPy:n.sp||'',sMean:n.sm||'',sSound:'',img:'',sound:''});
+      added++}
+    if(added){sentSeen.clear();saveAll()}
+    return added}catch(e){return 0}}
 async function loadStored(){try{const db=await idb();
   const arr=await new Promise((res,rej)=>{const t=db.transaction('notes','readonly');
     const r=t.objectStore('notes').get('all');r.onsuccess=()=>res(r.result||[]);r.onerror=()=>rej(r.error)});
@@ -217,7 +234,6 @@ async function loadStored(){try{const db=await idb();
 /* ---------- helpers ---------- */
 const $=id=>document.getElementById(id);
 const today=()=>new Date().toISOString().slice(0,10);
-function rollCounts(){const t=today();if(counts.d!==t){counts={d:t,n:0,r:0};save(LS.c,counts);}}
 function rollCounts(){const t=today();if(counts.d!==t){counts={d:t,n:{},r:{}};save(LS.c,counts);}}
 function statsView(){rollCounts();
   const live=notes.filter(n=>decksOn[n.deckId]&&!progress[n.id]?.leech);
@@ -420,15 +436,26 @@ function renderHome(){const ids=[...new Set(notes.map(n=>n.deckId))];
     const sentC=ns.filter(n=>progress['S'+n.id]).length;
     const doneC=ns.filter(n=>progress[n.id]?.state==='review').length;
     const desc=first.desc?`<div class="ddesc">${esc(String(first.desc).replace(/<[^>]*>/g,' ').slice(0,140))}</div>`:'';
+    const lang=first.lang==='zh'?'<span class="langtag">🇨🇳 Mandarin</span>':'';
     const card=document.createElement('div');card.className='deckcard';
-    card.innerHTML=`<h3>${name}</h3>
+    card.innerHTML=`<h3>${name} ${lang}</h3>
       <div class="dmeta">${ns.length} cards · <b>${newC}</b> new · ${learnC} learning · <b>${revC}</b> reviewing${doneC?` · ${doneC} done`:''}<br>
       ${dueC?`<b>${dueC} ready now</b> · `:''}${sentC} sentence(s) unlocked</div>${desc}
-      <button class="dreset" data-r="${esc(String(d))}">♻ reset</button>`;
+      <div class="dbtns"><button class="dreset" data-r="${esc(String(d))}">♻ reset</button>
+      <button class="dreset dx" data-x="${esc(String(d))}" data-n="${esc(first.deck||String(d))}">🗑 remove</button></div>`;
     card.onclick=e=>{if(e.target.closest('.dreset'))return;startDeck(d)};
     g.appendChild(card)}
   [...g.querySelectorAll('.dreset')].forEach(b=>b.onclick=e=>{
-    e.stopPropagation();resetDeck(b.dataset.r)})}
+    e.stopPropagation();resetDeck(b.dataset.r)});
+  [...g.querySelectorAll('.dx')].forEach(b=>b.onclick=e=>{
+    e.stopPropagation();removeDeck(b.dataset.x,b.dataset.n)})}
+function removeDeck(d,dname){const ns=notes.filter(n=>n.deckId===d);
+  if(!confirm(`Remove deck "${dname}" — all ${ns.length} cards and their progress?`))return;
+  for(const n of ns){delete progress[n.id];delete progress['S'+n.id]}
+  notes=notes.filter(n=>n.deckId!==d);
+  const off=load(LS.bdo,[]);if(!off.includes(String(d))){off.push(String(d));save(LS.bdo,off)}
+  if(studyDeck===d){studyDeck=null;showHome();return}
+  saveAll();renderHome()}
 function resetDeck(d){const ns=notes.filter(n=>n.deckId===d);
   if(!confirm(`Reset ALL progress for "${d}" (${ns.length} cards)? Lessons start over.`))return;
   for(const n of ns){delete progress[n.id];delete progress['S'+n.id]}
@@ -466,8 +493,9 @@ function idler(){if(idleTimer){clearInterval(idleTimer);idleTimer=null}
     idleTimer=setInterval(idler,5000);return}
   route()}
 function skipGate(){const act=activeNote();if(!act)return;
-  if(!progress['S'+act.id]){progress['S'+act.id]={state:'review',step:0,due:Date.now()+2*864e5,ivl:2,ease:2.5};persist()}
-  idler()}
+  if(!confirm('Skip this sentence gate? Its words keep their schedule; the sentence returns in 2 days.'))return;
+  const p=pOf(act.id);p.sentDone=true;p.state='review';p.ivl=Math.max(1,p.ivl||2);
+  p.due=Date.now()+2*864e5;persist();idler()}
 function route(){const e=queue[0];
   if(e&&e.sentNote){cur=e.sentNote;
     progress['S'+cur.id]?showSentTest():showSentQ();return}
@@ -694,9 +722,11 @@ window.addEventListener('drop',e=>{e.preventDefault();dragDepth=0;$('drop-overla
   if(e.dataTransfer?.files?.length)importFiles([...e.dataTransfer.files])});
 $('settings-btn').onclick=openSettings;
 $('reset-card-btn').onclick=()=>{
-  if(!cur){alert('No active card.');return}
-  if(!confirm('Reset progress for "'+(cur.hanzi||'')+'"? It will be learned fresh.'))return;
-  delete progress[cur.id];persist();statsView();
+  if(!studyDeck){alert('No deck active.');return}
+  const ns=notes.filter(n=>n.deckId===studyDeck);
+  if(!confirm(`Reset ALL progress for this deck (${ns.length} cards)? Everything starts over.`))return;
+  for(const n of ns){delete progress[n.id];delete progress['S'+n.id]}
+  counts.n[studyDeck]=0;counts.r[studyDeck]=0;persist();statsView();
   idler()};
 $('settings-close').onclick=closeSettings;
 $('deck-close').onclick=()=>$('deck-modal').classList.remove('open');
@@ -718,9 +748,10 @@ window.addEventListener('load',async()=>{speechSynthesis.onvoiceschanged=()=>pic
   try{await getSQL()}catch(e){}
   $('boot').style.display='none';
   loadBuild();setInterval(renderBuild,30000);
-  const restored=await loadStored();
+  await loadStored();
   showHome();
-  if(restored)statsView()});
+  const added=await loadBundled();
+  if(added)showHome()});
 document.addEventListener('click',function prime(){document.removeEventListener('click',arguments.callee);
   try{const u=new SpeechSynthesisUtterance(' ');u.volume=0;speechSynthesis.speak(u)}catch(e){}},{once:true});
 </script>
