@@ -514,8 +514,9 @@ function idler(){if(idleTimer){clearInterval(idleTimer);idleTimer=null}
     let goal='';
     if(act&&sHzHas(act)){const S=act.sHz||act.sMean;const seen=new Set();let left=0;
       for(const m of notes){if(!m.hanzi||seen.has(m.hanzi))continue;seen.add(m.hanzi);
-        if(S.includes(m.hanzi)&&progress[m.id]?.state!=='review')left++}
-      goal=`<br><br>🎯 current goal: <b>${esc(act.sMean||act.sHz)}</b><br><span class="hint">${left} word(s) still in learning steps${left? ' — auto-resuming when their timer hits' : ''}.</span>`}
+        const st=progress[m.id]?.state;
+        if(S.includes(m.hanzi)&&(st==='learn'||st==='relearn'))left++}
+      goal=`<br><br>🎯 current goal: <b>${esc(act.sMean||act.sHz)}</b><br><span class="hint">${left? left+' word(s) in learning steps — auto-resuming when their timer hits' : 'waiting on learning-step timers (≤2 min) — or skip the gate below'}.</span>`}
     $('stage-lbl').textContent='all caught up';
     setPrompt('<span class="hint">'+(act?'Caught up.':'No cards due. Import more decks on the home screen.')+goal+'</span>');
     setActions(...[act?btn('⏭ Skip gate — next sentence','g-hard',skipGate):null,
@@ -524,8 +525,8 @@ function idler(){if(idleTimer){clearInterval(idleTimer);idleTimer=null}
     idleTimer=setInterval(idler,5000);return}
   route()}
 function skipGate(){const act=activeNote();if(!act)return;
-  if(!confirm('Skip this sentence gate? Its words keep their schedule; the sentence returns in 2 days.'))return;
-  const p=pOf(act.id);p.sentDone=true;p.state='review';p.ivl=Math.max(1,p.ivl||2);
+  if(!confirm('Skip this sentence gate? The next sentence starts now; this one returns in 2 days.'))return;
+  const p=pOf(act.id);p.sentDone=true;p.skipped=true;p.state='review';p.ivl=Math.max(1,p.ivl||2);
   p.due=Date.now()+2*864e5;persist();idler()}
 function route(){const e=queue[0];
   if(e&&e.sentNote){cur=e.sentNote;
@@ -583,7 +584,7 @@ function sentReady(n){if(!(n.sHz||n.sMean))return false;
 function sentComplete(n){const p=progress[n.id];
   if(!(n.sHz||n.sMean))return p?.state==='review';
   if(!p||!p.sentDone)return false;
-  return sentReady(n)}
+  return sentReady(n)||p.skipped}
 function activeNote(){const c=notes.filter(n=>decksOn[n.deckId])
     .sort((a,b)=>(a.k||0)-(b.k||0)||(a.id<b.id?-1:1));
   for(const n of c)if(!sentComplete(n))return n;return null}
@@ -707,7 +708,7 @@ window.addEventListener('unhandledrejection',e=>diag('Promise error: '+((e.reaso
 
 /* ---------- build info ---------- */
 let lastCommit=null;
-const BUILD_DATE=1789494653;
+const BUILD_DATE=1789494899;
 function relTime(t){const s=(Date.now()-t)/1000;
   if(s<60)return Math.max(0,Math.floor(s))+'s ago';
   if(s<3600)return Math.floor(s/60)+'m ago';
