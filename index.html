@@ -89,7 +89,7 @@ footer{position:fixed;bottom:0;left:0;right:0;background:var(--panel);border-top
 </div>
 </main>
 <footer>
-<span class="hint">Space = play audio · Enter = reveal/next/submit · 1-4 = grade</span>
+<span class="hint">Space = replay audio · Enter = next / "I know it" · 1-4 = grade</span>
 </footer>
 
 <div class="modal" id="settings-modal">
@@ -318,20 +318,6 @@ function grade(action){ // Again Hard Good Easy = 0 1 2 3
     else{p.state='review';p.ivl=Math.max(2,Math.round(p.ivl*0.7));p.due=Date.now()+p.ivl*864e5}}
   persist();statsView()}
 
-/* ---------- speech ---------- */
-function speakCheck(target,cb){const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){cb(null,'Speech recognition unsupported — use Chrome, or self-grade.');return}
-  const r=new SR();r.lang='zh-CN';r.interimResults=false;r.maxAlternatives=3;
-  let done=false;
-  r.onresult=e=>{done=true;const said=[...e.results[0]].map(x=>normHz(x.transcript));
-    const tgt=normHz(target);let best=0;
-    for(const s of said){if(!s||!tgt)continue;
-      const eq=[...s].filter((c,i)=>c===tgt[i]).length;best=Math.max(best,eq/Math.max(tgt.length,1))}
-    cb(best,{said:said.join(' / ')})};
-  r.onerror=e=>{if(!done)cb(null,e.error)};
-  r.onend=()=>{if(!done)cb(null,'no speech captured')};
-  r.start()}
-
 /* ---------- render ---------- */
 let queue=[];
 function renderDeckbar(){const ids=[...new Set(notes.map(n=>n.deckId))];
@@ -353,62 +339,42 @@ function idler(){queue=buildQueue();if(!queue.length){
     setPrompt('<span class="hint">No cards due. Come back later or import more. 🎉</span>');
     setActions(btn('🔄 Rebuild queue',null,idler));
     cur=null;statsView();return}
-  cur=queue[0];stage=0;showIntro()}
-function showIntro(){stage=0;$('stage-lbl').textContent=`introduce — ${cur.deck}`;
-  setPrompt(`<div class="py">${esc(cur.pinyin)||'<span class="hint">(no pinyin field)</span>'}</div>
-    <div class="hz hidden-h">${esc(cur.hanzi)}</div>
-    <div class="hint">🔊 listen. guess the meaning before revealing.</div>`);
-  $('feedback').textContent=(cur.sound&&!soundUrl(cur))?'⚠ deck audio file missing — using TTS voice':'';
-  $('feedback').className=(cur.sound&&!soundUrl(cur))?'warn':'';
-  if(!settings.noautoplay)playAudio(cur);
-  setActions(
-    btn('🔊 Play',null,()=>playAudio(cur),'space'),
-    btn('Speak it →','primary',()=>{tts(cur.hanzi||cur.pinyin);stage=1;setTimeout(showTest,1200)},'enter'))}
-function showMeaning(){stage=1;$('stage-lbl').textContent='meaning';
-  setPrompt(`<div class="py">${esc(cur.pinyin)}</div><div class="hz">${esc(cur.hanzi)}</div>
-    <div class="meaning">${esc(cur.meaning)}</div>
-    <div class="hint">link sound → pinyin → meaning</div>`);
-  setActions(btn('🔊 Replay',null,()=>playAudio(cur),'space'),
-    btn('Now ask me →','primary',showTest,'enter'))}
-function showTest(){stage=2;$('stage-lbl').textContent=`recall — how do you say this?`;
-  setPrompt(`<div class="prompt">🗣️ <b>${esc(cur.meaning)}</b></div>
-    <div class="hint">say it aloud, then type the pinyin to check</div>
-    <input id="answer-in" placeholder="type pinyin (tones optional)" autocomplete="off">`);
-  if(settings.noautoplay)playAudio(cur);else if(cur.pinyin)playAudio(cur);
+  cur=queue[0];
+  const isNew=!progress[cur.id]||progress[cur.id].state==='new';
+  isNew?showLearn():showRecall()}
+function fullView(note){return `<div class="py">${esc(note.pinyin)||'<span class="hint">(no pinyin)</span>'}</div>
+    <div class="hz">${esc(note.hanzi)}</div>
+    <div class="meaning">${esc(note.meaning)}</div>`}
+function audioWarn(){return (cur.sound&&!soundUrl(cur))?'<div class="hint">⚠ deck audio missing — TTS voice</div>':''}
+function showLearn(){stage=0;$('stage-lbl').textContent=`introduce — ${cur.deck}`;
+  setPrompt(fullView(cur)+audioWarn()+`<div class="hint">🔊 sound + pinyin + hanzi + meaning. absorb it.</div>`);
   $('feedback').textContent='';$('feedback').className='';
-  const inp=$('answer-in');inp.focus();
-  inp.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();submitAnswer()}};
+  if(!settings.noautoplay)playAudio(cur);
+  setActions(btn('🔊 Play',null,()=>playAudio(cur),'space'),
+    btn('Next →','primary',showRecall,'enter'))}
+function showRecall(){stage=1;$('stage-lbl').textContent='recall — audio only';
+  setPrompt(`<div class="prompt">🎧 what does this mean?</div>${audioWarn()}
+    <div class="hint">say the meaning aloud in your head/voice. no hints.</div>`);
+  $('feedback').textContent='';$('feedback').className='';
+  if(!settings.noautoplay)playAudio(cur);
   startTimer();
-  setActions(
-    btn('🎤 Speak',null,()=>{$('feedback').textContent='🎤 listening…';
-      speakCheck(cur.hanzi,(res,info)=>{if(res==null){$('feedback').textContent=info||'unrecognized';$('feedback').className='warn';return}
-        const pct=Math.round(res*100);
-        $('feedback').textContent=(pct>=80?'✅ ':'⚠️ ')+'heard: '+info.said+' ('+pct+'%)';
-        $('feedback').className=pct>=80?'ok':'warn'})}),
-    btn('🔊 Play',null,()=>playAudio(cur),'space'),
-    btn('Show answer',null,submitAnswer,'enter'))}
-function submitAnswer(){if(stage!==2)return;stopTimer();
-  const typed=($('answer-in')?.value||'').trim();
-  answerGiven=typed;
-  const good=normPy(typed)===normPy(cur.pinyin)&&!!normPy(cur.pinyin);
-  const near=!good&&typed&&lev(normPy(typed),normPy(cur.pinyin))<=1;
-  $('feedback').textContent=good?'✅ correct!':near?'≈ close — check spelling':'— shown below';
-  $('feedback').className=good?'ok':near?'warn':'';
-  stage=3;showResult(good,near)}
-function showResult(good,near){stage=3;$('stage-lbl').textContent='check & grade';
-  setPrompt(`<div class="py">${esc(cur.pinyin)}</div><div class="hz">${esc(cur.hanzi)}</div>
-    <div class="meaning">${esc(cur.meaning)}</div>
-    ${answerGiven?`<div class="hint">you typed: ${esc(answerGiven)}</div>`:''}
-    <div class="btnrow">${btn('🔊 Replay',null,()=>playAudio(cur))}</div>`);
-  if(!settings.noautoplay&&!playSound(cur))tts(cur.hanzi);
-  const p=pOf(cur.id);const first=(p.state==='new');
-  setActions(
+  setActions(btn('🔊 Play',null,()=>playAudio(cur),'space'),
+    btn('✅ I know it','g-next',()=>showGrade(true),'enter'),
+    btn('👀 Show me','g-hard',()=>showGrade(false)))}
+function showGrade(known){stage=2;stopTimer();
+  setPrompt(fullView(cur)+audioWarn()+
+    (known?'<div class="hint">you said you knew it — grade honestly</div>'
+          :'<div class="hint">didn\'t know it — this repeats soon (learning steps)</div>'));
+  playAudio(cur);
+  setActions(btn('🔁 Test again','g-next',showRecall),
     btn('Again','g-again',()=>finish(0),'1'),
     btn('Hard','g-hard',()=>finish(1),'2'),
     btn('Good','g-good',()=>finish(2),'3'),
     btn('Easy','g-easy',()=>finish(3),'4'))}
 function finish(action){grade(action);queue.shift();stage=0;
-  if(!queue.length){idler();return}cur=queue[0];showIntro()}
+  if(!queue.length){idler();return}cur=queue[0];
+  const isNew=!progress[cur.id]||progress[cur.id].state==='new';
+  isNew?showLearn():showRecall()}
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 
 /* ---------- settings UI ---------- */
@@ -449,6 +415,10 @@ async function importFiles(files){const status=[];
     if(/\.apkg$|\.colpkg$/i.test(f.name)){const res=await importApkg(f,prog);got=res.notes;report=res.report}
     else got=importTsv(await f.text(),f.name);
     if(!got.length){status[status.length-1]=`⚠️ ${f.name}: 0 notes found (empty or wrong format)`;continue}
+    const stubs=got.filter(n=>/update to the latest anki|import the .colpkg\/.apkg/i.test(n.hanzi+' '+n.meaning));
+    if(stubs.length&&stubs.length===got.length){
+      status[status.length-1]=`❌ ${f.name}: this is a STUB package (placeholder note, no vocabulary). Re-download the real deck from AnkiWeb via Anki Desktop 24+, or use another deck.`;continue}
+    if(stubs.length)got=got.filter(n=>!(/update to the latest anki|import the .colpkg\/.apkg/i.test(n.hanzi+' '+n.meaning)));
     const gids=new Set(got.map(n=>n.deckId));gids.forEach(g=>{if(!(g in decksOn))decksOn[g]=true});
     notes=notes.filter(n=>!gids.has(n.deckId)).concat(got);
     const mediaN=Object.keys(mediaMap).length;
@@ -480,9 +450,9 @@ $('s-preset').onchange=()=>{const p=presets[$('s-preset').value];if(!p)return;
   fillSettings({...settings,...p});$('s-preset').value=$('s-preset').selectedOptions[0].textContent};
 
 document.addEventListener('keydown',e=>{
-  if(e.target.tagName==='INPUT'&&e.key!==' ')return;
-  if(e.key===' '){e.preventDefault();const p=$('prompt');playAudio(cur);return}
-  if(e.key==='Enter'){e.preventDefault();const a=$('actions').querySelector('button.primary,button.g-next');if(a)a.click();return}
+  if(e.target.tagName==='INPUT')return;
+  if(e.key===' '){e.preventDefault();playAudio(cur);return}
+  if(e.key==='Enter'){e.preventDefault();const a=$('actions').querySelector('button.primary')||$('actions').querySelector('button.g-good');if(a)a.click();return}
   const map={'1':0,'2':1,'3':2,'4':3};
   if(e.key in map){const b=$('actions').querySelectorAll('.g-again,.g-hard,.g-good,.g-easy')[map[e.key]];if(b)b.click()}});
 setInterval(()=>{if(cur&&(stage===0||stage===1)&&progress[cur.id]&&(progress[cur.id].state==='learn'||progress[cur.id].state==='relearn')&&progress[cur.id].due<=Date.now()){/* learning cards resurface handled by queue */}},10000);
