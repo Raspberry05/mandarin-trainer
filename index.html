@@ -330,7 +330,7 @@ function buildQueue(){
   const act=activeNote();
   if(act){const S=act.sHz||act.sMean;
     const words=live.filter(n=>n.hanzi&&S.includes(n.hanzi)&&(!progress[n.id]||progress[n.id].state==='new'));
-    if(!words.length&&!act.sentDone)head=[{sentNote:act}];
+    if(!words.length&&!act.sentDone&&sentReady(act))head=[{sentNote:act}];
     else newQ=words.sort((a,b)=>(a.k||0)-(b.k||0)||(a.id<b.id?-1:1)).slice(0,Math.max(0,Math.min(settings.newday,settings.newday-counts.n)))}
   let q=settings.newafter?[...head,...revN,...newQ]:[...head,...newQ,...revN];
   // bury siblings: same hanzi only once per session (sent items keyed separately)
@@ -387,8 +387,14 @@ function startTimer(){stopTimer();if(!settings.maxsec)return;t0=Date.now();
   timerInt=setInterval(()=>{const left=Math.max(0,settings.maxsec-(Date.now()-t0)/1000);
     $('timer').textContent=Math.ceil(left)+'s';if(left<=0)stopTimer()},250)}
 function idler(){queue=buildQueue();if(!queue.length){
+    const act=activeNote();
+    let goal='';
+    if(act&&sHzHas(act)){const S=act.sHz||act.sMean;const seen=new Set();let left=0;
+      for(const m of notes){if(!m.hanzi||seen.has(m.hanzi))continue;seen.add(m.hanzi);
+        if(S.includes(m.hanzi)&&progress[m.id]?.state!=='review')left++}
+      goal=`<br><br>🎯 current goal: <b>${esc(act.sMean||act.sHz)}</b><br><span class="hint">${left} word(s) still in learning steps — they'll come back on their schedule.</span>`}
     $('stage-lbl').textContent='done for now';
-    setPrompt('<span class="hint">No cards due. Come back later or import more. 🎉</span>');
+    setPrompt('<span class="hint">'+(act?'All caught up for now.':'No cards due. Come back later or import more. 🎉')+goal+'</span>');
     setActions(btn('🔄 Rebuild queue',null,idler));
     cur=null;statsView();return}
   route()}
