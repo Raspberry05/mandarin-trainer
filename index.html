@@ -208,7 +208,10 @@ async function saveAll(){try{
     for(const[name,blob]of Object.entries(mediaBlobs))s.put(blob,name);
     t.oncomplete=()=>res();t.onerror=()=>rej(t.error)})}catch(e){}}
 async function loadBundled(){
-  const off=load(LS.bdo,[]).map(String);
+  // bundled decks always load — clear any stale suppression flags
+  const offRaw=load(LS.bdo,[]).map(String);
+  const off=offRaw.filter(x=>!['mz','hsk15','hsk6'].includes(x));
+  if(off.length!==offRaw.length)save(LS.bdo,off);
   let j=null;
   for(let i=0;i<3&&!j;i++){
     try{const r=await fetch('data/mandarin.json?v='+BUILD_DATE,{cache:'no-store'});if(!r.ok)throw new Error('http '+r.status);j=await r.json()}
@@ -684,15 +687,18 @@ function closeSettings(){readSettings();statsView();$('settings-modal').classLis
 
 /* ---------- build info ---------- */
 let lastCommit=null;
-const BUILD_DATE=1789440485;
+const BUILD_DATE=1789440761;
 function relTime(t){const s=(Date.now()-t)/1000;
   if(s<60)return Math.max(0,Math.floor(s))+'s ago';
   if(s<3600)return Math.floor(s/60)+'m ago';
   if(s<86400)return Math.floor(s/3600)+'h ago';
   return Math.floor(s/86400)+'d ago'}
 function renderBuild(){if(!lastCommit)return;
-  const outdated=(Date.now()-BUILD_DATE)<lastCommit.t-21600e3?' <span class="hint">(outdated — refresh)</span>':'';
-  $('build-info').innerHTML=`build <b>${lastCommit.sha}</b> · updated ${relTime(lastCommit.t)}${outdated}`}
+  const outdated=(Date.now()-BUILD_DATE)<lastCommit.t-21600e3?' <span class="hint">(outdated — refreshing…)</span>':'';
+  $('build-info').innerHTML=`build <b>${lastCommit.sha}</b> · updated ${relTime(lastCommit.t)}${outdated}`;
+  if(outdated&&!sessionStorage.getItem('ast_reloaded')){
+    sessionStorage.setItem('ast_reloaded','1');
+    setTimeout(()=>location.reload(),2500)}}
 async function loadBuild(){try{
   const r=await fetch('https://api.github.com/repos/Raspberry05/mandarin-trainer/commits/master');
   if(!r.ok)throw 0;const j=await r.json();
