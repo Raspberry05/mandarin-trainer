@@ -74,7 +74,9 @@ footer{position:fixed;bottom:0;left:0;right:0;background:rgba(20,26,35,.85);back
 .hero h2{font-size:30px;margin:0 0 6px;font-weight:700}
 #home-drop{background:var(--panel);border:2px dashed #323d4e;border-radius:18px;padding:26px;display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap;font-size:16px;color:var(--dim);margin-bottom:16px}
 #deck-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:18px;margin-top:18px}
-.deckcard{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:26px 26px 20px;cursor:pointer;transition:all .15s ease;display:flex;flex-direction:column;gap:12px}
+.deckcard{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:26px 26px 20px;cursor:pointer;transition:all .15s ease;display:flex;flex-direction:column;gap:12px;overflow:hidden}
+.flagbar{margin:-26px -26px 14px}
+.flagbar svg{display:block;width:100%;height:44px;border-radius:17px 17px 0 0}
 .deckcard:hover{border-color:var(--acc);transform:translateY(-2px);box-shadow:0 8px 28px rgba(0,0,0,.35)}
 .deckcard h3{margin:0;font-size:19px;color:var(--fg);word-break:break-word;padding-right:4px}
 .deckcard .dmeta{color:var(--dim);font-size:14.5px;line-height:1.8}
@@ -444,6 +446,9 @@ function renderHome(){const ids=[...new Set(notes.map(n=>n.deckId))];
   const g=$('deck-grid');g.innerHTML='';
   if(!ids.length){g.innerHTML='<div class="hint" style="text-align:center;width:100%">No decks yet — import an .apkg above, or drop it here.</div>';return}
   rollCounts();
+  const FLAG={
+    zh:'<div class="flagbar"><svg viewBox="0 0 30 20" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice"><rect width="30" height="20" fill="#de2910"/><text x="2.5" y="7.2" font-size="5.6" fill="#ffde00">★</text><text x="10" y="3.6" font-size="2.6" fill="#ffde00">★</text><text x="11.8" y="5.8" font-size="2.6" fill="#ffde00">★</text><text x="11.8" y="8.9" font-size="2.6" fill="#ffde00">★</text><text x="10" y="11" font-size="2.6" fill="#ffde00">★</text></svg></div>',
+    es:'<div class="flagbar"><svg viewBox="0 0 30 20" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice"><rect width="30" height="20" fill="#c60b1e"/><rect y="5" width="30" height="10" fill="#ffc400"/></svg></div>'};
   for(const d of ids){const ns=notes.filter(n=>n.deckId===d);
     const first=ns[0]||{};
     const name=esc(first.deck||String(d).replace(/^tsv-/,''));
@@ -454,10 +459,10 @@ function renderHome(){const ids=[...new Set(notes.map(n=>n.deckId))];
     const sentC=ns.filter(n=>progress['S'+n.id]).length;
     const doneC=ns.filter(n=>progress[n.id]?.state==='review').length;
     const desc=first.desc?`<div class="ddesc">${esc(String(first.desc).replace(/<[^>]*>/g,' ').slice(0,140))}</div>`:'';
-    const lang=first.lang==='zh'?'<span class="langtag">🇨🇳 Mandarin</span>':'';
+    const lang=first.lang==='zh'?'<span class="langtag">Mandarin · Simplified</span>':'';
     const card=document.createElement('div');card.className='deckcard';
     const bundled=String(d)==='mz';
-    card.innerHTML=`<h3>${name} ${lang}</h3>
+    card.innerHTML=`${FLAG[first.lang]||''}<h3>${name} ${lang}</h3>
       <div class="dmeta">${ns.length} cards · <b>${newC}</b> new · ${learnC} learning · <b>${revC}</b> reviewing${doneC?` · ${doneC} done`:''}<br>
       ${dueC?`<b>${dueC} ready now</b> · `:''}${sentC} sentence(s) unlocked</div>${desc}
       <div class="dbtns"><button class="dreset" data-r="${esc(String(d))}">♻ reset</button>
@@ -465,7 +470,7 @@ function renderHome(){const ids=[...new Set(notes.map(n=>n.deckId))];
     card.onclick=e=>{if(e.target.closest('.dreset'))return;startDeck(d)};
     g.appendChild(card)}
   const soon=document.createElement('div');soon.className='deckcard soon';
-  soon.innerHTML=`<h3>🇪🇸 Spanish</h3><div class="dmeta">Curriculum in preparation — coming soon.</div>`;
+  soon.innerHTML=`${FLAG.es}<h3>Spanish</h3><div class="dmeta">Curriculum in preparation — coming soon.</div>`;
   g.appendChild(soon);
   [...g.querySelectorAll('.dreset')].forEach(b=>b.onclick=e=>{
     e.stopPropagation();resetDeck(b.dataset.r)});
@@ -702,7 +707,7 @@ window.addEventListener('unhandledrejection',e=>diag('Promise error: '+((e.reaso
 
 /* ---------- build info ---------- */
 let lastCommit=null;
-const BUILD_DATE=1789494455;
+const BUILD_DATE=1789494653;
 function relTime(t){const s=(Date.now()-t)/1000;
   if(s<60)return Math.max(0,Math.floor(s))+'s ago';
   if(s<3600)return Math.floor(s/60)+'m ago';
