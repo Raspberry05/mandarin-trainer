@@ -80,6 +80,7 @@ footer{position:fixed;bottom:0;left:0;right:0;background:rgba(20,26,35,.85);back
 .deckcard .dmeta{color:var(--dim);font-size:13.5px;line-height:1.7}
 .deckcard .dmeta b{color:var(--acc)}
 .deckcard .dreset{position:absolute;top:12px;right:12px;padding:5px 10px;font-size:12px;border-radius:8px}
+.ddesc{color:var(--dim);font-size:12.5px;margin-top:10px;border-top:1px solid var(--bd);padding-top:8px;line-height:1.5}
 @media(max-width:640px){#cardbox{padding:28px 18px}.hz{font-size:52px}.py{font-size:36px}.meaning{font-size:21px}}
 </style>
 </head>
@@ -333,7 +334,7 @@ async function importApkg(file,onProg){const zip=await JSZip.loadAsync(file);
     let img=imgM?imgM[1]:null;
     if(img){try{img=decodeURIComponent(img)}catch(e){}}
     out.push({id:'a'+id,deckId:deckOf[id]??mid,deck:decks[deckOf[id]]?.name||m.name,
-      hanzi:vals[ih]||sfld,pinyin:vals[ip]||'',meaning:vals[im]||'',sound,img,
+      desc:decks[deckOf[id]]?.desc||'',hanzi:vals[ih]||sfld,pinyin:vals[ip]||'',meaning:vals[im]||'',sound,img,
       sHz:vals[ish]||'',sPy:vals[isp]||'',sMean:vals[ism]||'',sSound,k:parseInt(vals[0])||0})}
   db.close();return {notes:out,report:modelReport}}
 function importTsv(text,fname){const out=[];const lines=text.split(/\r?\n/).filter(l=>l.trim());
@@ -410,13 +411,19 @@ function renderHome(){const ids=[...new Set(notes.map(n=>n.deckId))];
   if(!ids.length){g.innerHTML='<div class="hint" style="text-align:center;width:100%">No decks yet — import an .apkg above, or drop it here.</div>';return}
   rollCounts();
   for(const d of ids){const ns=notes.filter(n=>n.deckId===d);
+    const first=ns[0]||{};
+    const name=esc(first.deck||String(d).replace(/^tsv-/,''));
     const newC=ns.filter(n=>!progress[n.id]).length;
     const revC=ns.filter(n=>progress[n.id]?.state==='review').length;
     const learnC=ns.length-newC-revC;
+    const dueC=ns.filter(n=>isDue(n.id)||(progress['S'+n.id]?.due||1/0)<=Date.now()).length;
     const sentC=ns.filter(n=>progress['S'+n.id]).length;
+    const doneC=ns.filter(n=>progress[n.id]?.state==='review').length;
+    const desc=first.desc?`<div class="ddesc">${esc(String(first.desc).replace(/<[^>]*>/g,' ').slice(0,140))}</div>`:'';
     const card=document.createElement('div');card.className='deckcard';
-    card.innerHTML=`<h3>${esc(String(d).replace(/^tsv-/,''))}</h3>
-      <div class="dmeta">${ns.length} cards · <b>${newC}</b> new · ${learnC} learning · <b>${revC}</b> reviewing<br>${sentC} sentence(s) unlocked</div>
+    card.innerHTML=`<h3>${name}</h3>
+      <div class="dmeta">${ns.length} cards · <b>${newC}</b> new · ${learnC} learning · <b>${revC}</b> reviewing${doneC?` · ${doneC} done`:''}<br>
+      ${dueC?`<b>${dueC} ready now</b> · `:''}${sentC} sentence(s) unlocked</div>${desc}
       <button class="dreset" data-r="${esc(String(d))}">♻ reset</button>`;
     card.onclick=e=>{if(e.target.closest('.dreset'))return;startDeck(d)};
     g.appendChild(card)}
@@ -442,18 +449,25 @@ function stopTimer(){clearInterval(timerInt);timerInt=null;$('timer').textConten
 function startTimer(){stopTimer();if(!settings.maxsec)return;t0=Date.now();
   timerInt=setInterval(()=>{const left=Math.max(0,settings.maxsec-(Date.now()-t0)/1000);
     $('timer').textContent=Math.ceil(left)+'s';if(left<=0)stopTimer()},250)}
-function idler(){queue=buildQueue();if(!queue.length){
+let idleTimer=null;
+function idler(){if(idleTimer){clearInterval(idleTimer);idleTimer=null}
+  queue=buildQueue();if(!queue.length){
     const act=activeNote();
     let goal='';
     if(act&&sHzHas(act)){const S=act.sHz||act.sMean;const seen=new Set();let left=0;
       for(const m of notes){if(!m.hanzi||seen.has(m.hanzi))continue;seen.add(m.hanzi);
         if(S.includes(m.hanzi)&&progress[m.id]?.state!=='review')left++}
-      goal=`<br><br>🎯 current goal: <b>${esc(act.sMean||act.sHz)}</b><br><span class="hint">${left} word(s) still in learning steps — they'll come back on their schedule.</span>`}
-    $('stage-lbl').textContent='done for now';
-    setPrompt('<span class="hint">'+(act?'All caught up for now.':'No cards due. Come back later or import more. 🎉')+goal+'</span>');
-    setActions(btn('🔄 Rebuild queue',null,idler));
-    cur=null;statsView();return}
+      goal=`<br><br>🎯 current goal: <b>${esc(act.sMean||act.sHz)}</b><br><span class="hint">${left} word(s) still in learning steps${left? ' — auto-resuming when their timer hits' : ''}.</span>`}
+    $('stage-lbl').textContent='all caught up';
+    setPrompt('<span class="hint">'+(act?'Caught up.':'No cards due. Import more decks on the home screen.')+goal+'</span>');
+    setActions(...[act?btn('⏭ Skip gate — next sentence','g-hard',skipGate):null,
+      btn('🔄 Rebuild queue',null,idler)].filter(Boolean));
+    cur=null;statsView();
+    idleTimer=setInterval(idler,5000);return}
   route()}
+function skipGate(){const act=activeNote();if(!act)return;
+  if(!progress['S'+act.id]){progress['S'+act.id]={state:'review',step:0,due:Date.now()+2*864e5,ivl:2,ease:2.5};persist()}
+  idler()}
 function route(){const e=queue[0];
   if(e&&e.sentNote){cur=e.sentNote;
     progress['S'+cur.id]?showSentTest():showSentQ();return}
@@ -537,13 +551,21 @@ function showWordTest(){stage=2;$('stage-lbl').textContent='test — how do you 
   $('feedback').textContent='';$('feedback').className='';
   setActions(btn('✅ I know it','g-next',()=>testReveal(true),'enter'),
     btn('❌ I don\'t know','g-again',()=>testReveal(false)))}
+function removeCard(){if(!cur)return;
+  if(!confirm('Delete "'+(cur.hanzi||'')+'" permanently from this deck?'))return;
+  notes=notes.filter(n=>n.id!==cur.id);
+  delete progress[cur.id];delete progress['S'+cur.id];
+  persist();saveAll();
+  const i=queue.indexOf(cur);if(i>=0)queue.splice(i,1);
+  if(!queue.length){idler();return}route()}
 function testReveal(known){stage=3;
   setPrompt(fullView(cur)+audioWarn()+
     (known?'<div class="hint">knew it — graded Good, next review pushed out</div>'
           :'<div class="hint">didn\'t know — graded Again, repeats soon</div>'));
   playAudio(cur);
-  setActions(btn('🔊 Replay',null,()=>playAudio(cur),'space'),
-    btn('Continue →','primary',()=>finish(known?2:0),'enter'))}
+  setActions(...[btn('🔊 Replay',null,()=>playAudio(cur),'space'),
+    btn('Continue →','primary',()=>finish(known?2:0),'enter'),
+    btn('🗑 Remove card','g-again',removeCard)].filter(Boolean))}
 function gradeSent(known){const id='S'+cur.id;
   const p=progress[id]||(progress[id]={state:'review',step:0,due:0,ivl:2,ease:2.5});
   if(known){p.ivl=Math.min(settings.maxivl,Math.round(p.ivl*1.9));p.due=Date.now()+p.ivl*864e5}
@@ -576,9 +598,10 @@ function showSentFail(){stage=6;$('stage-lbl').textContent='sentence forgotten �
 function showWordCard(m,back){setPrompt(fullView(m)+
     (m.sHz?`<hr style="border-color:var(--bd);width:100%"><div class="hz" style="font-size:26px">${sentHtml(m)}</div><div class="meaning">${esc(m.sMean)}</div>`:''));
   playAudio(m);
-  setActions(btn('🔊 Word',null,()=>playAudio(m),'space'),
+  setActions(...[btn('🔊 Word',null,()=>playAudio(m),'space'),
     m.sSound?btn('🔊 Its sentence',null,()=>playSent(m)):null,
-    btn('← Back','primary',back||showSentFail,'enter'))}
+    btn('🗑 Remove card','g-again',()=>{const bak=back;cur=m;removeCard()}),
+    btn('← Back','primary',back||showSentFail,'enter')].filter(Boolean))}
 function showSentRetest(){stage=7;$('stage-lbl').textContent='sentence — try again';
   setPrompt(`<div class="hint">one more time — how do you say:</div>
     <div class="meaning" style="font-size:27px;color:#e8edf3">${esc(cur.sMean||cur.sHz)}</div>`);
