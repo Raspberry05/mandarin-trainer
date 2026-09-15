@@ -395,7 +395,8 @@ function buildQueue(){
   if(act){const S=act.sHz||act.sMean;
     const words=live.filter(n=>n.hanzi&&S.includes(n.hanzi)&&(!progress[n.id]||progress[n.id].state==='new'));
     if(!words.length&&!progress['S'+act.id]&&sentReady(act))head=[{sentNote:act}];
-    else newQ=words.sort((a,b)=>(a.k||0)-(b.k||0)||(a.id<b.id?-1:1)).slice(0,Math.max(0,Math.min(settings.newday,settings.newday-counts.n)))}
+    else newQ=words.sort((a,b)=>(a.k||0)-(b.k||0)||(a.id<b.id?-1:1))
+      .slice(0,Math.max(0,Math.min(settings.newday,settings.newday-((counts.n[studyDeck||act.deckId])||0))))}
   let q=settings.newafter?[...head,...revN,...sentDue,...newQ]:[...head,...newQ,...revN,...sentDue];
   // bury siblings: same hanzi only once per session (sent items keyed separately)
   const seen=new Set();
@@ -708,7 +709,7 @@ window.addEventListener('unhandledrejection',e=>diag('Promise error: '+((e.reaso
 
 /* ---------- build info ---------- */
 let lastCommit=null;
-const BUILD_DATE=1789494899;
+const BUILD_DATE=1789495286;
 function relTime(t){const s=(Date.now()-t)/1000;
   if(s<60)return Math.max(0,Math.floor(s))+'s ago';
   if(s<3600)return Math.floor(s/60)+'m ago';
