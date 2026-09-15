@@ -246,7 +246,7 @@ async function loadStored(){try{const db=await Promise.race([idb(),
     const rq=t.objectStore('media').openCursor();
     rq.onsuccess=()=>{const c=rq.result;if(c){mediaMap[String(c.key).toLowerCase()]=URL.createObjectURL(c.value);c.continue()}else res()};
     rq.onerror=()=>res()});
-  notes.forEach(n=>{if(!(n.deckId in decksOn))decksOn[n.deckId]=true});
+  notes.forEach(n=>{n.deckId=String(n.deckId);if(!(n.deckId in decksOn))decksOn[n.deckId]=true});
   return true}catch(e){return false}}
 
 /* ---------- helpers ---------- */
@@ -367,7 +367,7 @@ async function importApkg(file,onProg){const zip=await JSZip.loadAsync(file);
     const imgM=String(flds).match(/<img[^>]+src=["']?([^"'>\s]+)/i);
     let img=imgM?imgM[1]:null;
     if(img){try{img=decodeURIComponent(img)}catch(e){}}
-    out.push({id:'a'+id,deckId:deckOf[id]??mid,deck:decks[deckOf[id]]?.name||m.name,
+    out.push({id:'a'+id,deckId:String(deckOf[id]??mid),deck:decks[deckOf[id]]?.name||m.name,
       desc:decks[deckOf[id]]?.desc||'',hanzi:vals[ih]||sfld,pinyin:vals[ip]||'',meaning:vals[im]||'',sound,img,
       sHz:vals[ish]||'',sPy:vals[isp]||'',sMean:vals[ism]||'',sSound,k:parseInt(vals[0])||0})}
   db.close();return {notes:out,report:modelReport}}
@@ -471,15 +471,17 @@ function renderHome(){const ids=[...new Set(notes.map(n=>n.deckId))];
     e.stopPropagation();resetDeck(b.dataset.r)});
   [...g.querySelectorAll('.dx')].forEach(b=>b.onclick=e=>{
     e.stopPropagation();removeDeck(b.dataset.x,b.dataset.n)})}
-function removeDeck(d,dname){if(String(d)==='mz'){alert('The Mandarin curriculum is built into Language Trainer and cannot be removed.');return}
-  const ns=notes.filter(n=>n.deckId===d);
+function removeDeck(dRaw,dname){const d=String(dRaw);
+  if(d==='mz'){alert('The Mandarin curriculum is built into Language Trainer and cannot be removed.');return}
+  const ns=notes.filter(n=>String(n.deckId)===d);
   if(!confirm(`Remove deck "${dname}" — all ${ns.length} cards and their progress?`))return;
+  if(!ns.length){alert('No cards found for this deck.');return}
   for(const n of ns){delete progress[n.id];delete progress['S'+n.id]}
-  notes=notes.filter(n=>n.deckId!==d);
-  const off=load(LS.bdo,[]);if(!off.includes(String(d))){off.push(String(d));save(LS.bdo,off)}
+  notes=notes.filter(n=>String(n.deckId)!==d);
+  const off=load(LS.bdo,[]);if(!off.includes(d)){off.push(d);save(LS.bdo,off)}
   if(studyDeck===d){studyDeck=null;showHome();return}
   saveAll();renderHome()}
-function resetDeck(d){const ns=notes.filter(n=>n.deckId===d);
+function resetDeck(dRaw){const d=String(dRaw);const ns=notes.filter(n=>String(n.deckId)===d);
   if(!confirm(`Reset ALL progress for "${d}" (${ns.length} cards)? Lessons start over.`))return;
   for(const n of ns){delete progress[n.id];delete progress['S'+n.id]}
   counts.n[d]=0;counts.r[d]=0;persist();saveAll();sentSeen.clear();renderHome()}
@@ -698,7 +700,7 @@ window.addEventListener('unhandledrejection',e=>diag('Promise error: '+((e.reaso
 
 /* ---------- build info ---------- */
 let lastCommit=null;
-const BUILD_DATE=1789494055;
+const BUILD_DATE=1789494255;
 function relTime(t){const s=(Date.now()-t)/1000;
   if(s<60)return Math.max(0,Math.floor(s))+'s ago';
   if(s<3600)return Math.floor(s/60)+'m ago';
