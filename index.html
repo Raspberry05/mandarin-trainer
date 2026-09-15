@@ -628,20 +628,30 @@ function testReveal(known){stage=3;
   setActions(...[btn('🔊 Replay',null,()=>playAudio(cur),'space'),
     btn('Continue →','primary',()=>finish(known?2:0),'enter'),
     btn('🗑 Remove card','g-again',removeCard)].filter(Boolean))}
-function gradeSent(known){const id='S'+cur.id;
+function gradeSent(a){ // Again Hard Good Easy = 0 1 2 3
+  const id='S'+cur.id;
   const p=progress[id]||(progress[id]={state:'review',step:0,due:0,ivl:2,ease:2.5});
-  if(known){p.ivl=Math.min(settings.maxivl,Math.round(p.ivl*1.9));p.due=Date.now()+p.ivl*864e5}
-  else{p.ivl=Math.max(1,Math.round(p.ivl*0.4));p.due=Date.now()+5*60e3}
+  if(a===0){p.ivl=Math.max(1,Math.round(p.ivl*0.4));p.ease=Math.max(1.3,(p.ease||2.5)-0.2);p.due=Date.now()+5*60e3}
+  else{if(a===1){p.ease=Math.max(1.3,(p.ease||2.5)-0.15);p.ivl=Math.max(1,Math.round(p.ivl*1.2))}
+    else if(a===2){p.ivl=Math.max(1,Math.round(p.ivl*(p.ease||2.5)))}
+    else{p.ease=Math.min(3.0,(p.ease||2.5)+0.1);p.ivl=Math.round(p.ivl*(p.ease||2.5)*1.3)}
+    p.ivl=Math.min(p.ivl,settings.maxivl);p.due=Date.now()+p.ivl*864e5}
   persist();statsView()}
-function showSentTest(){stage=4;$('stage-lbl').textContent='sentence review — do you still know it?';
-  setPrompt(`<div class="hint">how do you say this sentence?</div>
+function showSentTest(){stage=4;$('stage-lbl').textContent='sentence review — how do you say it?';
+  setPrompt(`<div class="hint">🔊 listen, then recall — how do you say this in Mandarin?</div>
     <div class="meaning" style="font-size:27px;color:#e8edf3">${esc(cur.sMean||cur.sHz)}</div>
-    <div class="hint">say it aloud. hover shows word meanings only on reveal.</div>`);
+    <div class="hint">say it aloud before judging yourself. hanzi reveals after grading.</div>`);
   $('feedback').textContent='';$('feedback').className='';
-  setActions(btn('✅ I know it','g-next',()=>{gradeSent(true);sentRevealDone()},'enter'),
-    btn('❌ I don\'t know','g-again',()=>{gradeSent(false);showSentFail()}))}
+  if(!settings.noautoplay)playSent(cur);
+  setActions(btn('🔊 Replay',null,()=>playSent(cur),'space'),
+    btn('1 Again','g-again',()=>{gradeSent(0);showSentFail()}),
+    btn('2 Hard','g-hard',()=>{gradeSent(1);sentRevealDone()}),
+    btn('3 Good','g-good',()=>{gradeSent(2);sentRevealDone()},'enter'),
+    btn('4 Easy','g-easy',()=>{gradeSent(3);sentRevealDone()}))}
 function sentRevealDone(){stage=5;
-  setPrompt(sentView(cur)+`<div class="hint">sentence passed — next review later, Anki-style</div>`);
+  const sp=progress['S'+cur.id];
+  const days=sp&&sp.due>Date.now()?Math.max(1,Math.round((sp.due-Date.now())/864e5)):null;
+  setPrompt(sentView(cur)+`<div class="hint">${days?`sentence passed — next review in ~${days} day(s)`:'sentence passed — next review later, Anki-style'}</div>`);
   playSent();
   setActions(btn('🔊 Replay',null,playSent,'space'),
     btn('Next →','primary',advance,'enter'))}
@@ -709,7 +719,7 @@ window.addEventListener('unhandledrejection',e=>diag('Promise error: '+((e.reaso
 
 /* ---------- build info ---------- */
 let lastCommit=null;
-const BUILD_DATE=1789495286;
+const BUILD_DATE=1789495757;
 function relTime(t){const s=(Date.now()-t)/1000;
   if(s<60)return Math.max(0,Math.floor(s))+'s ago';
   if(s<3600)return Math.floor(s/60)+'m ago';
