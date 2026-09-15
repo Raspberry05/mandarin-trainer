@@ -73,15 +73,17 @@ footer{position:fixed;bottom:0;left:0;right:0;background:rgba(20,26,35,.85);back
 .hero{text-align:center;margin:18px 0 22px}
 .hero h2{font-size:30px;margin:0 0 6px;font-weight:700}
 #home-drop{background:var(--panel);border:2px dashed #323d4e;border-radius:18px;padding:26px;display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap;font-size:16px;color:var(--dim);margin-bottom:16px}
-#deck-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;margin-top:18px}
-.deckcard{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:20px;cursor:pointer;transition:all .15s ease;position:relative}
+#deck-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:18px;margin-top:18px}
+.deckcard{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:26px 26px 20px;cursor:pointer;transition:all .15s ease;display:flex;flex-direction:column;gap:12px}
 .deckcard:hover{border-color:var(--acc);transform:translateY(-2px);box-shadow:0 8px 28px rgba(0,0,0,.35)}
-.deckcard h3{margin:0 0 10px;font-size:17px;color:var(--fg);word-break:break-all}
-.deckcard .dmeta{color:var(--dim);font-size:13.5px;line-height:1.7}
+.deckcard h3{margin:0;font-size:19px;color:var(--fg);word-break:break-word;padding-right:4px}
+.deckcard .dmeta{color:var(--dim);font-size:14.5px;line-height:1.8}
 .deckcard .dmeta b{color:var(--acc)}
-.dbtns{position:absolute;top:12px;right:12px;display:flex;gap:6px}
-.langtag{font-size:12px;color:var(--acc);font-weight:400}
-.dreset{padding:5px 10px;font-size:12px;border-radius:8px}
+.deckcard.soon{opacity:.55;cursor:default}
+.deckcard.soon:hover{border-color:var(--bd);transform:none;box-shadow:none}
+.dbtns{margin-top:auto;display:flex;gap:8px}
+.langtag{font-size:12.5px;color:var(--acc);font-weight:400;white-space:nowrap}
+.dreset{padding:6px 14px;font-size:13px;border-radius:8px}
 .deckcard .dx{color:#ff7b72}
 .ddesc{color:var(--dim);font-size:12.5px;margin-top:10px;border-top:1px solid var(--bd);padding-top:8px;line-height:1.5}
 @media(max-width:640px){#cardbox{padding:28px 18px}.hz{font-size:52px}.py{font-size:36px}.meaning{font-size:21px}}
@@ -98,7 +100,7 @@ footer{position:fixed;bottom:0;left:0;right:0;background:rgba(20,26,35,.85);back
 </header>
 <main>
 <div id="home-view">
-  <div class="hero"><h2>Language Trainer</h2><p class="hint">Sentence-first Anki-style lessons. Import a deck, pick it, learn.</p></div>
+  <div class="hero"><p class="hint" style="font-size:15px">Sentence-first Anki-style lessons. Pick a curriculum below, or import your own deck.</p></div>
   <div id="home-drop">📦 drop .apkg / .txt here — or <button id="import-btn" class="primary">⬆ Import decks</button></div>
   <div id="import-status" class="hint"></div>
   <div id="deck-grid"></div>
@@ -209,7 +211,10 @@ async function loadBundled(){
   const off=load(LS.bdo,[]).map(String);
   try{const r=await fetch('data/mandarin.json');if(!r.ok)throw 0;const j=await r.json();
     let added=0;
-    const decks={};for(const d of j.decks)decks[d.id]=d;
+    // migration: purge legacy per-file bundled ids (hsk15/hsk6) replaced by combined 'mz'
+    const legacy=notes.filter(n=>n.id.startsWith('bhsk15')||n.id.startsWith('bhsk6'));
+    for(const n of legacy){delete progress[n.id];delete progress['S'+n.id]}
+    if(legacy.length)notes=notes.filter(n=>!legacy.includes(n));
     for(const n of j.notes){const d=j.decks[n.d];
       if(!d||off.includes(String(d.id)))continue;
       if(notes.some(x=>x.id===n.id))continue;
@@ -217,7 +222,7 @@ async function loadBundled(){
         hanzi:n.h,pinyin:n.p||'',meaning:n.m||'',k:n.k||0,
         sHz:n.sh||'',sPy:n.sp||'',sMean:n.sm||'',sSound:'',img:'',sound:''});
       added++}
-    if(added){sentSeen.clear();saveAll()}
+    if(added||legacy.length){sentSeen.clear();saveAll()}
     return added}catch(e){return 0}}
 async function loadStored(){try{const db=await idb();
   const arr=await new Promise((res,rej)=>{const t=db.transaction('notes','readonly');
@@ -445,6 +450,9 @@ function renderHome(){const ids=[...new Set(notes.map(n=>n.deckId))];
       <button class="dreset dx" data-x="${esc(String(d))}" data-n="${esc(first.deck||String(d))}">🗑 remove</button></div>`;
     card.onclick=e=>{if(e.target.closest('.dreset'))return;startDeck(d)};
     g.appendChild(card)}
+  const soon=document.createElement('div');soon.className='deckcard soon';
+  soon.innerHTML=`<h3>🇪🇸 Spanish</h3><div class="dmeta">Curriculum in preparation — coming soon.</div>`;
+  g.appendChild(soon);
   [...g.querySelectorAll('.dreset')].forEach(b=>b.onclick=e=>{
     e.stopPropagation();resetDeck(b.dataset.r)});
   [...g.querySelectorAll('.dx')].forEach(b=>b.onclick=e=>{
@@ -676,7 +684,7 @@ function relTime(t){const s=(Date.now()-t)/1000;
   if(s<86400)return Math.floor(s/3600)+'h ago';
   return Math.floor(s/86400)+'d ago'}
 function renderBuild(){if(!lastCommit)return;
-  const outdated=(Date.now()-BUILD_DATE)<lastCommit.t-120e3?' <span class="hint">(outdated — refresh)</span>':'';
+  const outdated=(Date.now()-BUILD_DATE)<lastCommit.t-21600e3?' <span class="hint">(outdated — refresh)</span>':'';
   $('build-info').innerHTML=`build <b>${lastCommit.sha}</b> · updated ${relTime(lastCommit.t)}${outdated}`}
 async function loadBuild(){try{
   const r=await fetch('https://api.github.com/repos/Raspberry05/mandarin-trainer/commits/master');
