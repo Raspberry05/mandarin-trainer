@@ -68,6 +68,7 @@ footer{position:fixed;bottom:0;left:0;right:0;background:var(--panel);border-top
 <span>Leeched: <b id="st-leech">0</b></span>
 </div>
 <div id="deckbar"></div>
+<div id="import-status" class="hint" style="margin-bottom:12px"></div>
 <div id="cardbox">
 <div class="stage" id="stage-lbl">no decks loaded</div>
 <div class="prompt" id="prompt">Import your Anki deck (<b>.apkg</b>) or a <b>TSV</b> (hanzi&nbsp;&lt;tab&gt;&nbsp;pinyin&nbsp;&lt;tab&gt;&nbsp;meaning).<br><br><span class="hint">From Anki: File → Export → Apkg. Or Notes as text.</span></div>
@@ -120,6 +121,7 @@ footer{position:fixed;bottom:0;left:0;right:0;background:var(--panel);border-top
 
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/sql-wasm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/fzstd@0.1.1/umd/index.js"></script>
 <script>
 "use strict";
 /* ---------- storage ---------- */
@@ -186,15 +188,20 @@ let SQLP=null;
 function getSQL(){if(!SQLP)SQLP=initSqlJs({locateFile:f=>`https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/${f}`});return SQLP}
 function clean(s){return (s||'').replace(/<[^>]*>/g,'').replace(/&nbsp;/g,' ').replace(/&amp;/g,'&').replace(/\[sound:[^\]]+\]/g,'').trim()}
 async function importApkg(file){const zip=await JSZip.loadAsync(file);
-  const mediaInfo=JSON.parse(await zip.file('media').async('string')||'{}');
+  const mf=zip.file('media');
+  const mediaInfo=JSON.parse(await (mf?mf.async('string'):'{}')||'{}');
   for(const[num,fname]of Object.entries(mediaInfo)){
     if(/\.(mp3|m4a|ogg|wav|aac)$/i.test(fname)){
       const buf=await zip.file(num).async('arraybuffer');
       mediaMap[fname]=URL.createObjectURL(new Blob([buf]))}}
-  const dbFile=zip.file('collection.anki2')||zip.file('collection.anki21');
-  if(!dbFile)throw new Error('collection.anki2 not found (newer Anki zstd format unsupported — export with "Support older Anki versions")');
+  const dbFile=zip.file('collection.anki2')||zip.file('collection.anki21')||zip.file('collection.anki21b');
+  if(!dbFile)throw new Error('collection.anki2 not found in '+file.name);
   const SQL=await getSQL();
-  const db=new SQL.Database(await dbFile.async('arraybuffer'));
+  let dbBytes=await dbFile.async('uint8array');
+  if(/anki21b$/.test(dbFile.name)){
+    if(typeof fzstd==='undefined')throw new Error('zstd decompressor failed to load');
+    dbBytes=fzstd.decompress(dbBytes)}
+  const db=new SQL.Database(dbBytes);
   const models={},decks={};
   db.exec('SELECT json FROM col')[0].values.forEach(([j])=>{const c=JSON.parse(j);
     (c.models||[]).forEach(m=>models[m.id]=m);(c.decks||[]).forEach(d=>decks[d.id]=d)});
@@ -380,15 +387,23 @@ function closeSettings(){readSettings();statsView();$('settings-modal').classLis
 
 /* ---------- wiring ---------- */
 $('import-btn').onclick=()=>$('file-in').click();
-$('file-in').onchange=async e=>{const files=[...e.target.files];e.target.value='';
+async function importFiles(files){const status=[];
   for(const f of files){try{
-    if(/\.apkg$|\.colpkg$/i.test(f.name)){const got=await importApkg(f);
-      const gids=new Set(got.map(n=>n.deckId));gids.forEach(g=>{if(!(g in decksOn))decksOn[g]=true});
-      notes=notes.filter(n=>!gids.has(n.deckId)).concat(got)}
-    else{const text=await f.text();const got=importTsv(text,f.name);
-      decksOn[got[0].deckId]=true;notes=notes.filter(n=>n.deckId!==got[0].deckId).concat(got)}
-  }catch(err){alert('Import failed: '+err.message)}}
-  renderDeckbar();statsView();if(notes.length)idler()};
+    let got;
+    if(/\.apkg$|\.colpkg$/i.test(f.name))got=await importApkg(f);
+    else got=importTsv(await f.text(),f.name);
+    if(!got.length){status.push(`⚠️ ${f.name}: 0 notes found (empty or wrong format)`);continue}
+    const gids=new Set(got.map(n=>n.deckId));gids.forEach(g=>{if(!(g in decksOn))decksOn[g]=true});
+    notes=notes.filter(n=>!gids.has(n.deckId)).concat(got);
+    status.push(`✅ ${f.name}: ${got.length} notes, ${gids.size} deck(s)`)
+  }catch(err){status.push(`❌ ${f.name}: ${err.message}`)}}
+  $('import-status').innerHTML=status.join('<br>');
+  renderDeckbar();statsView();
+  if(notes.length)idler();
+  else{$('stage-lbl').textContent='no decks loaded'}}
+$('file-in').onchange=e=>{const files=[...e.target.files];e.target.value='';importFiles(files)};
+document.addEventListener('dragover',e=>{e.preventDefault()});
+document.addEventListener('drop',e=>{e.preventDefault();if(e.dataTransfer?.files?.length)importFiles([...e.dataTransfer.files])});
 $('settings-btn').onclick=openSettings;
 $('settings-close').onclick=closeSettings;
 $('deck-close').onclick=()=>$('deck-modal').classList.remove('open');
