@@ -307,7 +307,7 @@ async function importApkg(file,onProg){const zip=await JSZip.loadAsync(file);
     if(img){try{img=decodeURIComponent(img)}catch(e){}}
     out.push({id:'a'+id,deckId:deckOf[id]??mid,deck:decks[deckOf[id]]?.name||m.name,
       hanzi:vals[ih]||sfld,pinyin:vals[ip]||'',meaning:vals[im]||'',sound,img,
-      sHz:vals[ish]||'',sPy:vals[isp]||'',sMean:vals[ism]||'',sSound})}
+      sHz:vals[ish]||'',sPy:vals[isp]||'',sMean:vals[ism]||'',sSound,k:parseInt(vals[0])||0})}
   db.close();return {notes:out,report:modelReport}}
 function importTsv(text,fname){const out=[];const lines=text.split(/\r?\n/).filter(l=>l.trim());
   for(const[i,line]of lines.entries()){const cols=line.split('\t').map(clean).filter(Boolean);
@@ -325,14 +325,16 @@ function buildQueue(){
   if(settings.revsrt.startsWith('Random'))rev.sort(()=>Math.random()-.5);
   else rev.sort((a,b)=>(progress[a.id].due-progress[b.id].due)+(Math.random()-.5)*10);
   const revN=rev.slice(0,settings.maxrev);
-  let newQ=live.filter(n=>!progress[n.id]);
-  if(settings.newsrt.startsWith('Sequential'))newQ.sort((a,b)=>a.id<b.id?-1:1);
-  else newQ.sort(()=>Math.random()-.5);
-  newQ=newQ.slice(0,Math.max(0,Math.min(settings.newday,settings.newday-counts.n)));
-  let q=settings.newafter?[...revN,...newQ]:[...newQ,...revN];
-  // bury siblings: same hanzi only once per session
+  let head=[],newQ=[];
+  const act=activeNote();
+  if(act){const S=act.sHz||act.sMean;
+    const words=live.filter(n=>n.hanzi&&S.includes(n.hanzi)&&(!progress[n.id]||progress[n.id].state==='new'));
+    if(!words.length&&!act.sentDone)head=[{sentNote:act}];
+    else newQ=words.sort((a,b)=>(a.k||0)-(b.k||0)||(a.id<b.id?-1:1)).slice(0,Math.max(0,Math.min(settings.newday,settings.newday-counts.n)))}
+  let q=settings.newafter?[...head,...revN,...newQ]:[...head,...newQ,...revN];
+  // bury siblings: same hanzi only once per session (sent items keyed separately)
   const seen=new Set();
-  q=q.filter(n=>{const k=normHz(n.hanzi);if(seen.has(k))return false;seen.add(k);return true});
+  q=q.filter(n=>{const k=n.sentNote?'S'+n.sentNote.id:normHz(n.hanzi);if(seen.has(k))return false;seen.add(k);return true});
   return q}
 function pOf(id){if(!progress[id]){progress[id]={state:'new',step:0,due:0,ivl:0,ease:2.5,lapses:0};}
   return progress[id]}
@@ -393,8 +395,12 @@ function route(){const e=queue[0];
   if(e&&e.sentNote){cur=e.sentNote;showSentQ(null);return}
   cur=e;
   const isNew=!progress[cur.id]||progress[cur.id].state==='new';
-  if(isNew){(cur.sHz||cur.sMean)?showSentIntro():showListen();return}
+  if(isNew){const act=activeNote();
+    if(act&&sHzHas(act)&&!sentSeen.has(act.id)){sentSeen.add(act.id);showSentIntro();return}
+    showListen();return}
   showWordTest()}
+const sHzHas=n=>!!(n.sHz||n.sMean);
+const sentSeen=new Set();
 function fullView(note){const iu=note.img&&mediaMap[String(note.img).toLowerCase()];
   return `<div class="py">${esc(note.pinyin)||'<span class="hint">(no pinyin)</span>'}</div>
     <div class="hz">${esc(note.hanzi)}</div>
@@ -408,24 +414,29 @@ function sentView(note){const su=note.sSound&&soundUrl({sound:note.sSound});
     <div class="meaning">${esc(note.sMean)}</div>
     ${su?'':'<div class="hint">⚠ no sentence audio — TTS</div>'}`}
 function audioWarn(){return (cur.sound&&!soundUrl(cur))?'<div class="hint">⚠ deck audio missing — TTS voice</div>':''}
-function playSent(){const m=cur.sSound&&soundUrl({sound:cur.sSound});
-  if(m){new Audio(m).play().catch(()=>tts(cur.sHz))}else tts(cur.sHz||cur.hanzi)}
+function playSent(n){n=n||cur;const m=n.sSound&&soundUrl({sound:n.sSound});
+  if(m){new Audio(m).play().catch(()=>tts(n.sHz))}else tts(n.sHz||n.hanzi)}
 function sentReady(n){if(!(n.sHz||n.sMean))return false;
-  const s=n.sHz||n.sMean;const seen=new Set();
-  for(const m of notes){if(m.id===n.id||!m.hanzi||seen.has(m.hanzi))continue;
-    seen.add(m.hanzi);
-    if(s.includes(m.hanzi)&&!progress[m.id])return false}
+  const S=n.sHz||n.sMean;const seen=new Set();
+  for(const m of notes){if(!m.hanzi||seen.has(m.hanzi))continue;seen.add(m.hanzi);
+    if(S.includes(m.hanzi)&&progress[m.id]?.state!=='review')return false}
   return true}
-function showSentIntro(){stage=0;$('stage-lbl').textContent=`lesson — ${cur.deck}`;
+function sentComplete(n){const p=progress[n.id];
+  if(!(n.sHz||n.sMean))return p?.state==='review';
+  if(!p||!p.sentDone)return false;
+  return sentReady(n)}
+function activeNote(){const c=[...notes].sort((a,b)=>(a.k||0)-(b.k||0)||(a.id<b.id?-1:1));
+  for(const n of c)if(!sentComplete(n))return n;return null}
+function showSentIntro(){const A=activeNote()||cur;stage=0;$('stage-lbl').textContent=`lesson — ${cur.deck}`;
   setPrompt(`<div class="hint">today you'll learn to say:</div>
-    <div class="hz" style="font-size:34px">${esc(cur.sHz)}</div>
-    <div class="py" style="font-size:26px">${esc(cur.sPy)}</div>
-    <div class="meaning">${esc(cur.sMean)}</div>
-    ${cur.img&&mediaMap[String(cur.img).toLowerCase()]?`<img class="note-img" src="${mediaMap[String(cur.img).toLowerCase()]}" alt="">`:''}
+    <div class="hz" style="font-size:34px">${esc(A.sHz)}</div>
+    <div class="py" style="font-size:26px">${esc(A.sPy)}</div>
+    <div class="meaning">${esc(A.sMean)}</div>
+    ${A.img&&mediaMap[String(A.img).toLowerCase()]?`<img class="note-img" src="${mediaMap[String(A.img).toLowerCase()]}" alt="">`:''}
     <div class="hint">🔊 just listen for now. then we break it down word by word.</div>`);
   $('feedback').textContent='';$('feedback').className='';
-  if(!settings.noautoplay)playSent();
-  setActions(btn('🔊 Replay sentence',null,playSent,'space'),
+  if(!settings.noautoplay)playSent(A);
+  setActions(btn('🔊 Replay sentence',null,()=>playSent(A),'space'),
     btn('Break it down →','primary',showListen,'enter'))}
 function showListen(){stage=1;$('stage-lbl').textContent=`word — ${cur.deck}`;
   setPrompt(fullView(cur)+audioWarn()+`<div class="hint">a piece of your sentence: 🔊 + pinyin + hanzi + meaning</div>`);
@@ -445,10 +456,8 @@ function testReveal(known){stage=3;
     (known?'<div class="hint">knew it — graded Good, next review pushed out</div>'
           :'<div class="hint">didn\'t know — graded Again, repeats soon</div>'));
   playAudio(cur);
-  const ready=sentReady(cur);
-  setActions(...[btn('🔊 Replay',null,()=>playAudio(cur),'space'),
-    ready?btn('🗣️ Practice the sentence →','g-hard',()=>showSentQ(known)):null,
-    btn('Continue →','primary',()=>finish(known?2:0),'enter')].filter(Boolean))}
+  setActions(btn('🔊 Replay',null,()=>playAudio(cur),'space'),
+    btn('Continue →','primary',()=>finish(known?2:0),'enter'))}
 function showSentQ(known){stage=5;$('stage-lbl').textContent=known==null?'sentence practice':'sentence — put it together';
   setPrompt(`<div class="hint">how do you say this sentence?</div>
     <div class="meaning" style="font-size:27px;color:#e8edf3">${esc(cur.sMean||cur.sHz)}</div>
@@ -474,7 +483,10 @@ function finish(action){grade(action);
   const extra=liveNotes().filter(n=>isDue(n.id)&&!queue.includes(n)).slice(0,50);
   queue.unshift(...extra);
   if(!queue.length){idler();return}route()}
-function advance(){queue.shift();stage=0;
+function advance(){const e=queue[0];
+  if(e&&e.sentNote){const p=progress[e.sentNote.id];
+    if(p&&!p.sentDone){p.sentDone=true;persist()}}
+  queue.shift();stage=0;
   if(!queue.length){idler();return}route()}
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 
