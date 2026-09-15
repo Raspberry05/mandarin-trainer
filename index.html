@@ -37,6 +37,20 @@ main{max-width:860px;margin:0 auto;padding:24px 20px 90px}
 .chip:hover{border-color:var(--acc)}
 .chip.on{border-color:var(--acc);color:var(--acc);background:rgba(90,169,255,.08)}
 #cardbox{background:linear-gradient(180deg,rgba(255,255,255,.02),transparent),var(--card);border:1px solid var(--bd);border-radius:22px;padding:44px 36px;min-height:440px;display:flex;flex-direction:column;align-items:center;gap:20px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.35)}
+#study-wrap{display:flex;gap:14px;align-items:stretch}
+.study-main{flex:1;min-width:0}
+#rail{display:flex;flex-direction:column;align-items:center;gap:8px;flex:0 0 30px}
+#rail-lbl{font-size:11px;color:var(--dim);writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap}
+#rail-bar{width:8px;flex:1;background:var(--panel);border:1px solid var(--bd);border-radius:6px;overflow:hidden;display:flex;align-items:flex-end}
+#rail-fill{width:100%;height:0%;background:linear-gradient(180deg,var(--acc),rgba(90,169,255,.4));transition:height .4s ease}
+#curriculum{flex:0 0 220px;background:var(--panel);border:1px solid var(--bd);border-radius:14px;padding:10px;max-height:560px;overflow:auto;font-size:13px;align-self:flex-start}
+#curriculum h3{margin:2px 0 8px;font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em}
+#curriculum .les{display:flex;gap:6px;padding:5px 7px;border-radius:8px;color:var(--dim)}
+#curriculum .les.click{cursor:pointer}
+#curriculum .les.click:hover{background:rgba(90,169,255,.08)}
+#curriculum .les.done{color:var(--ok)}
+#curriculum .les.cur{color:var(--acc);background:rgba(90,169,255,.1);font-weight:600}
+#curriculum .les.lock{opacity:.45}
 .stage{color:var(--acc);font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;background:rgba(90,169,255,.08);border:1px solid rgba(90,169,255,.2);border-radius:20px;padding:5px 14px}
 .prompt{font-size:22px}
 .py{font-size:42px;font-weight:650;letter-spacing:.02em;color:var(--acc)}
@@ -120,12 +134,18 @@ footer{position:fixed;bottom:0;left:0;right:0;background:rgba(20,26,35,.85);back
     <span>Leeched: <b id="st-leech">0</b></span>
   </div>
   <div id="deckbar"></div>
-  <div id="cardbox">
-    <div class="stage" id="stage-lbl">no decks loaded</div>
-    <div class="prompt" id="prompt"></div>
-    <div class="btnrow" id="actions"></div>
-    <div id="feedback"></div>
-    <div id="timer"></div>
+  <div id="study-wrap">
+    <div id="rail"><div id="rail-lbl"></div><div id="rail-bar"><div id="rail-fill"></div></div></div>
+    <div id="curriculum"></div>
+    <div class="study-main">
+    <div id="cardbox">
+      <div class="stage" id="stage-lbl">no decks loaded</div>
+      <div class="prompt" id="prompt"></div>
+      <div class="btnrow" id="actions"></div>
+      <div id="feedback"></div>
+      <div id="timer"></div>
+    </div>
+    </div>
   </div>
 </div>
 </main>
@@ -272,7 +292,24 @@ function statsView(){rollCounts();
   $('st-new').textContent=nToday+'/'+settings.newday;
   $('st-rev').textContent=rToday+'/'+settings.maxrev;
   $('st-queue').textContent=due+(nLeft?` (+${nLeft} new)`:'');
-  $('st-leech').textContent=notes.filter(n=>progress[n.id]?.leech).length;}
+  $('st-leech').textContent=notes.filter(n=>progress[n.id]?.leech).length;
+  renderRail()}
+function lessons(){return liveNotes().filter(n=>sHzHas(n))
+  .sort((a,b)=>(a.k||0)-(b.k||0)||(a.id<b.id?-1:1))}
+function renderRail(){const all=lessons();const cur=activeNote();
+  const curIdx=cur?all.indexOf(cur):all.length;
+  const done=all.filter(n=>progress['S'+n.id]||sentComplete(n)).length;
+  $('rail-fill').style.height=(all.length?Math.round(done/all.length*100):0)+'%';
+  $('rail-lbl').textContent=all.length?done+'/'+all.length:'';
+  const c=$('curriculum');if(!c)return;
+  c.innerHTML=`<h3>curriculum — lesson ${Math.min(curIdx+1,all.length)} of ${all.length}</h3>`;
+  all.forEach((n,i)=>{const d=document.createElement('div');
+    d.className='les '+(progress['S'+n.id]?'done':(n===cur?'cur':(i<curIdx?'done':'lock')))
+      +((i<=curIdx)?' click':'');
+    d.textContent=(progress['S'+n.id]?'✓ ':(n===cur?'▶ ':'🔒 '))+(i+1)+'. '+(n.sMean||n.sHz);
+    if(i<=curIdx)d.onclick=()=>{queue=[{sentNote:n}];route()};
+    else d.onclick=null;
+    c.appendChild(d)})}
 function isDue(id){const p=progress[id];if(!p)return false;if(p.state==='new')return false;
   if(p.state==='learn'||p.state==='relearn')return p.due<=Date.now();
   return p.due<=Date.now();}
@@ -507,7 +544,8 @@ function removeDeck(dRaw,dname){const d=String(dRaw);
 function resetDeck(dRaw){const d=String(dRaw);const ns=notes.filter(n=>String(n.deckId)===d);
   if(!confirm(`Reset ALL progress for "${d}" (${ns.length} cards)? Lessons start over.`))return;
   for(const n of ns){delete progress[n.id];delete progress['S'+n.id]}
-  counts.n[d]=0;counts.r[d]=0;persist();saveAll();sentSeen.clear();renderHome()}
+  counts.n[d]=0;counts.r[d]=0;counts.s=counts.s||{};counts.s[d]=0;
+  persist();saveAll();sentSeen.clear();renderHome()}
 let queue=[];
 
 function renderDeckbar(){const ids=[...new Set(notes.map(n=>n.deckId))];
@@ -742,7 +780,7 @@ window.addEventListener('unhandledrejection',e=>diag('Promise error: '+((e.reaso
 
 /* ---------- build info ---------- */
 let lastCommit=null;
-const BUILD_DATE=1789496247;
+const BUILD_DATE=1789497819;
 function relTime(t){const s=(Date.now()-t)/1000;
   if(s<60)return Math.max(0,Math.floor(s))+'s ago';
   if(s<3600)return Math.floor(s/60)+'m ago';
@@ -802,8 +840,9 @@ $('reset-card-btn').onclick=()=>{
   const ns=notes.filter(n=>n.deckId===studyDeck);
   if(!confirm(`Reset ALL progress for this deck (${ns.length} cards)? Everything starts over.`))return;
   for(const n of ns){delete progress[n.id];delete progress['S'+n.id]}
-  counts.n[studyDeck]=0;counts.r[studyDeck]=0;persist();statsView();
-  idler()};
+  counts.n[studyDeck]=0;counts.r[studyDeck]=0;counts.s=counts.s||{};counts.s[studyDeck]=0;
+  persist();statsView();
+  sentSeen.clear();queue=[];idler()};
 $('settings-close').onclick=closeSettings;
 $('deck-close').onclick=()=>$('deck-modal').classList.remove('open');
 $('preset-save').onclick=()=>{const n=$('s-pname').value.trim()||'Default';
