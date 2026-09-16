@@ -58,48 +58,58 @@ function fetchTtsCached(cache: Map<string, string>, k: string, url: string, init
   return run
 }
 async function elevenUrl(text: string, lang: string): Promise<string | null> {
-  /* two voices: EN questions (default George) vs ZH answers (default Alice / settings override).
-     Voice IDs are workspace-scoped — a personal API key can't use another workspace's IDs, so we
-     fetch the account's own voice list once and pick a fitting zh/en voice when the default fails. */
+  /* elevenlabs chain: personal key direct call (with account-voice fallback, 3 tries)
+     → server proxy (free-tier workspace, verified working) — every branch ends audible */
   const zh = lang.startsWith('zh')
-  let voice = zh ? (S.settings?.elevenVoice || 'Xb7hH8MSUJpSbSDYk0k2').trim()
-    : (S.settings?.elevenVoiceEn || 'JBFqnCBsd6RMkjVDRZzb').trim()
   const model = zh ? 'eleven_multilingual_v2' : 'eleven_flash_v2_5'
   const key = EL_KEY()
-  if (key && resolvedVoice[zh ? 'zh' : 'en']) voice = resolvedVoice[zh ? 'zh' : 'en'] // remembered working pick
-  else if (key && !userVoices) userVoices = fetchUserVoices(key) // warm the list in parallel
-  const init: RequestInit = key
-    ? { method: 'POST', headers: { 'xi-api-key': key, 'Content-Type': 'application/json' }, body: JSON.stringify({ text, model_id: model }) }
-    : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, lang, engine: 'eleven', voice }) }
-  const url = key
-    ? `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voice)}?output_format=mp3_44100_128`
-    : '/api/tts'
-  let u = await fetchTtsCached(eCache, 'e|' + voice + '|' + model + '|' + text, url, init)
-  if (!u && key && userVoices) {
-    // default voice likely invalid for this account — pick one from THEIR workspace and retry once
-    const vs = await userVoices
-    const pick = zh
-      ? vs.find(v => /^zh|cmn/i.test(v.language || '')) || vs[0]
-      : vs.find(v => /^en/i.test(v.language || '')) || vs[0]
-    if (pick && pick.id !== voice) {
-      voice = pick.id
-      resolvedVoice[zh ? 'zh' : 'en'] = voice
-      const init2: RequestInit = { method: 'POST', headers: { 'xi-api-key': key, 'Content-Type': 'application/json' }, body: JSON.stringify({ text, model_id: model }) }
-      u = await fetchTtsCached(eCache, 'e|' + voice + '|' + model + '|' + text,
-        `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voice)}?output_format=mp3_44100_128`, init2)
+  if (key && !directDead) {
+    let voice = zh ? (S.settings?.elevenVoice || 'Xb7hH8MSUJpSbSDYk0k2').trim()
+      : (S.settings?.elevenVoiceEn || 'JBFqnCBsd6RMkjVDRZzb').trim()
+    if (resolvedVoice[zh ? 'zh' : 'en']) voice = resolvedVoice[zh ? 'zh' : 'en']
+    else if (!userVoices) userVoices = fetchUserVoices(key)
+    const direct = (v: string) => fetchTtsCached(eCache, 'e|' + v + '|' + model + '|' + text,
+      `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(v)}?output_format=mp3_44100_128`,
+      { method: 'POST', headers: { 'xi-api-key': key, 'Content-Type': 'application/json' }, body: JSON.stringify({ text, model_id: model }) })
+    let u = await direct(voice)
+    if (!u && userVoices) {
+      // settings voice invalid/premium for this account — try their workspace's zh/en voices, up to 3
+      const vs = await userVoices
+      const cands = [voice, ...vs.filter(v => zh ? /^zh|cmn/i.test(v.language || '') : /^en/i.test(v.language || '')).map(v => v.id),
+        ...vs.map(v => v.id)].filter((id, i, a) => id && a.indexOf(id) === i).slice(0, 3)
+      for (const c of cands) {
+        if (c === voice) continue
+        u = await direct(c)
+        if (u) { resolvedVoice[zh ? 'zh' : 'en'] = c; diag('eleven direct voice resolved: ' + c); break } }
     }
+    if (u) return u
+    directDead = true // personal key unusable — stop wasting calls, use the server proxy
   }
-  return u
+  return proxyEleven(text, lang, model)
 }
 let userVoices: Promise<{ id: string; language?: string }[]> | null = null
+let directDead = false
 const resolvedVoice: Record<string, string> = {} // lang-side -> voice id that actually worked for this account
 async function fetchUserVoices(key: string) {
   try {
     const r = await fetch('https://api.elevenlabs.io/v1/voices', { headers: { 'xi-api-key': key } })
-    if (!r.ok) { diag('eleven voices list: HTTP ' + r.status + (key === '' ? ' (no key)' : '')); return [] }
+    if (!r.ok) { diag('eleven voices list: HTTP ' + r.status); return [] }
     const j = await r.json()
     return (j.voices || []).map((v: any) => ({ id: v.voice_id, language: v.labels?.language }))
   } catch (e) { diag('eleven voices list failed: ' + e); return [] }
+}
+async function proxyEleven(text: string, lang: string, model: string): Promise<string | null> {
+  const zh = lang.startsWith('zh')
+  const first = zh ? (S.settings?.elevenVoice || 'Xb7hH8MSUJpSbSDYk0k2').trim()
+    : (S.settings?.elevenVoiceEn || 'JBFqnCBsd6RMkjVDRZzb').trim()
+  const via = (v: string) => fetchTtsCached(eCache, 'ep|' + v + '|' + model + '|' + text, '/api/tts',
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, lang, engine: 'eleven', voice: v }) })
+  let u = await via(first)
+  if (!u) { // custom voice premium/invalid on server workspace — fall to verified free defaults
+    const dflt = zh ? 'Xb7hH8MSUJpSbSDYk0k2' : 'JBFqnCBsd6RMkjVDRZzb'
+    if (first !== dflt) u = await via(dflt)
+  }
+  return u
 }
 async function openaiUrl(text: string, lang: string): Promise<string | null> {
   const key = OAI_KEY()

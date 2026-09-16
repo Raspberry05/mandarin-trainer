@@ -1,6 +1,6 @@
 "use strict"
 import { S, $, esc, today, diag, rollCounts, pOf, persist, isDue, hskLevel, lessons, liveNotes, activeNote, sentReady, sentComplete, sentWords, sHzHas, load, save, LS, type Note, type Prog, type QItem, type Settings } from './state'
-import { imgSrc, fallbackArt, playAudio, playSent, soundUrl, pickVoice } from './audio'
+import { imgSrc, fallbackArt, playAudio, playSent, soundUrl, pickVoice, speak } from './audio'
 import { voiceTest, killVoice, voiceMode as voice } from './voice'
 import { buildQueue, grade, gradeSent } from './srs'
 import { saveAll, loadStored } from './idb'
@@ -679,6 +679,8 @@ export function init() {
     persist(); statsView()
     S.sentSeen.clear(); S.queue = []; idler() }
   ;($('settings-close') as HTMLElement)!.onclick = closeSettings
+  ;($('tts-test-zh') as HTMLElement)!.onclick = () => { readSettings(); speak('你好！我是你的中文老师，我们开始吧。', 'zh-CN') }
+  ;($('tts-test-en') as HTMLElement)!.onclick = () => { readSettings(); speak('Hello! I am your Mandarin tutor.', 'en') }
   ;($('auth-btn') as HTMLElement)!.onclick = () => {
     if (S.sbUser) { ($('auth-out') as HTMLElement)!.style.display = ''
       $('auth-msg')!.textContent = 'signed in as ' + (S.sbUser.email || '') + ' — progress auto-syncs'; sbModal(true) }
