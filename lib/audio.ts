@@ -1,0 +1,41 @@
+"use strict"
+import { S, esc, Note } from './state'
+
+/* ---------- TTS & audio ---------- */
+export function pickVoice() {
+  const vs = speechSynthesis.getVoices()
+  return vs.find(v => /zh[-_]CN/i.test(v.lang) && /female|mei|ting|yaoyao|huihui/i.test(v.name))
+      || vs.find(v => /^zh/i.test(v.lang)) || null
+}
+export function tts(text: string, rate?: number) {
+  if (!('speechSynthesis' in window) || !text) return
+  speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text)
+  u.lang = 'zh-CN'; u.rate = rate || 0.9; const v = pickVoice(); if (v) u.voice = v
+  speechSynthesis.speak(u)
+}
+export function soundUrl(note: { sound?: string | null }) {
+  if (!note.sound) return null
+  return S.mediaMap[note.sound] || S.mediaMap[String(note.sound).toLowerCase()] || null
+}
+export function imgSrc(note: Note) {
+  if (!note.img) return null
+  if (String(note.img).startsWith('data/')) return note.img
+  return S.mediaMap[String(note.img).toLowerCase()] || null
+}
+export const FB_EMOJI: Record<string, string> = {'我':'🧍','你':'🫵','他':'🧑','她':'👩','我们':'👥','他们':'👥','好':'👍','不':'🚫','是':'✅','很':'👌','吃':'🍚','喝':'🥤','水':'💧','看':'👀','听':'👂','说':'🗣️','读':'📖','写':'✍️','学':'🎓','学生':'🧑‍🎓','老师':'👩‍🏫','工作':'💼','买':'🛒','钱':'💰','电话':'📞','手机':'📱','电脑':'💻','爱':'❤️','喜欢':'💕','高兴':'😀','难过':'😢','生气':'😠','累':'😪','家':'🏠','房子':'🏡','学校':'🏫','医院':'🏥','商店':'🏪','火车':'🚄','飞机':'✈️','出租车':'🚕','跑':'🏃','睡觉':'😴','睡':'😴','起床':'⏰','早上':'🌅','晚上':'🌙','今天':'📅','明天':'📆','时间':'🕐','猫':'🐱','狗':'🐶','朋友':'🫂','孩子':'🧒','爸爸':'👨','妈妈':'👩'}
+export function fallbackArt(note: { sHz?: string; hanzi?: string; id: string }) {
+  const hz = (note.sHz || note.hanzi || '?').slice(0, 6)
+  let hash = 0; for (const c of String(note.id)) hash = (hash * 31 + c.charCodeAt(0)) >>> 0
+  const e = FB_EMOJI[hz] || FB_EMOJI[hz.slice(0, 2)] || FB_EMOJI[hz.slice(0, 1)] || ''
+  return `<div class="note-img fb-img" style="--h:${hash % 360}"><span>${e ? e + '<br>' : ''}${esc(hz)}</span></div>`
+}
+export function playSound(note: Note) {
+  const m = soundUrl(note)
+  if (m) { const a = new Audio(m); a.play().catch(() => tts(note.hanzi)); return true }
+  return false
+}
+export function playAudio(note: Note) { if (!playSound(note)) tts(note.hanzi || note.pinyin) }
+export function playSent(n: Note) {
+  const m = n.sSound && soundUrl({ sound: n.sSound })
+  if (m) { new Audio(m).play().catch(() => tts(n.sHz)) } else tts(n.sHz || n.hanzi)
+}
