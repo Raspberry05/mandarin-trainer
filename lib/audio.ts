@@ -1,5 +1,5 @@
 "use strict"
-import { S, esc, Note } from './state'
+import { S, esc, diag, Note } from './state'
 import { getTts, putTts } from './idb'
 
 /* ---------- TTS & audio ---------- */
@@ -48,7 +48,7 @@ function fetchTtsCached(cache: Map<string, string>, k: string, url: string, init
     if (idbHit) { const u = URL.createObjectURL(idbHit); cache.set(k, u); return u }
     try {
       const r = await fetch(url, init)
-      if (!r.ok) { ttsFailed.add(k); return null }
+      if (!r.ok) { ttsFailed.add(k); diag('tts ' + (url.startsWith('/') ? 'proxy' : 'direct') + ' HTTP ' + r.status + (url.startsWith('/') ? '' : ' voice=' + k.split('|')[1])); return null }
       const b = await r.blob()
       putTts(k, b)
       const u = URL.createObjectURL(b); cache.set(k, u); return u
@@ -59,19 +59,47 @@ function fetchTtsCached(cache: Map<string, string>, k: string, url: string, init
 }
 async function elevenUrl(text: string, lang: string): Promise<string | null> {
   /* two voices: EN questions (default George) vs ZH answers (default Alice / settings override).
-     Jason Chen DowyQ68vDpgFYdWVGjc3 (native Beijing Mandarin) is premium — 402 on free tier. */
+     Voice IDs are workspace-scoped — a personal API key can't use another workspace's IDs, so we
+     fetch the account's own voice list once and pick a fitting zh/en voice when the default fails. */
   const zh = lang.startsWith('zh')
-  const voice = zh ? (S.settings?.elevenVoice || 'Xb7hH8MSUJpSbSDYk0k2').trim()
+  let voice = zh ? (S.settings?.elevenVoice || 'Xb7hH8MSUJpSbSDYk0k2').trim()
     : (S.settings?.elevenVoiceEn || 'JBFqnCBsd6RMkjVDRZzb').trim()
   const model = zh ? 'eleven_multilingual_v2' : 'eleven_flash_v2_5'
   const key = EL_KEY()
+  if (key && resolvedVoice[zh ? 'zh' : 'en']) voice = resolvedVoice[zh ? 'zh' : 'en'] // remembered working pick
+  else if (key && !userVoices) userVoices = fetchUserVoices(key) // warm the list in parallel
   const init: RequestInit = key
     ? { method: 'POST', headers: { 'xi-api-key': key, 'Content-Type': 'application/json' }, body: JSON.stringify({ text, model_id: model }) }
     : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, lang, engine: 'eleven', voice }) }
   const url = key
     ? `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voice)}?output_format=mp3_44100_128`
     : '/api/tts'
-  return fetchTtsCached(eCache, 'e|' + voice + '|' + model + '|' + text, url, init)
+  let u = await fetchTtsCached(eCache, 'e|' + voice + '|' + model + '|' + text, url, init)
+  if (!u && key && userVoices) {
+    // default voice likely invalid for this account — pick one from THEIR workspace and retry once
+    const vs = await userVoices
+    const pick = zh
+      ? vs.find(v => /^zh|cmn/i.test(v.language || '')) || vs[0]
+      : vs.find(v => /^en/i.test(v.language || '')) || vs[0]
+    if (pick && pick.id !== voice) {
+      voice = pick.id
+      resolvedVoice[zh ? 'zh' : 'en'] = voice
+      const init2: RequestInit = { method: 'POST', headers: { 'xi-api-key': key, 'Content-Type': 'application/json' }, body: JSON.stringify({ text, model_id: model }) }
+      u = await fetchTtsCached(eCache, 'e|' + voice + '|' + model + '|' + text,
+        `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voice)}?output_format=mp3_44100_128`, init2)
+    }
+  }
+  return u
+}
+let userVoices: Promise<{ id: string; language?: string }[]> | null = null
+const resolvedVoice: Record<string, string> = {} // lang-side -> voice id that actually worked for this account
+async function fetchUserVoices(key: string) {
+  try {
+    const r = await fetch('https://api.elevenlabs.io/v1/voices', { headers: { 'xi-api-key': key } })
+    if (!r.ok) { diag('eleven voices list: HTTP ' + r.status + (key === '' ? ' (no key)' : '')); return [] }
+    const j = await r.json()
+    return (j.voices || []).map((v: any) => ({ id: v.voice_id, language: v.labels?.language }))
+  } catch (e) { diag('eleven voices list failed: ' + e); return [] }
 }
 async function openaiUrl(text: string, lang: string): Promise<string | null> {
   const key = OAI_KEY()

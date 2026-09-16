@@ -11,20 +11,25 @@ export function buildQueue(): QItem[] {
   const sentDue = live.filter(n => { const sp = S.progress['S' + n.id]; return sp && sp.due <= Date.now() })
   let head: QItem[] = []; let newQ: Note[] = []
   const act = activeNote()
+  let tail: QItem[] = []
   if (act) {
     const Str = act.sHz || act.sMean
+    const cap = Math.max(0, Math.min(S.settings!.newday, S.settings!.newday - ((S.counts.n[countKey()]) || 0)))
     const words = live.filter(n => n.hanzi && Str.includes(n.hanzi) && (!S.progress[n.id] || S.progress[n.id]!.state === 'new'))
-    // brand-new lesson: voice mode opens with the sentence question itself; flashcard only when nothing else pending
+      .sort((a, b) => (a.k || 0) - (b.k || 0) || (a.id < b.id ? -1 : 1)).slice(0, cap)
+    // teach sentence-first ALWAYS: sentence → its words → sentence practice, per lesson
     const neverSeen = !S.progress['S' + act.id] && !S.sentSeen.has(act.id)
-    if (neverSeen && (act.sHz || act.sMean) && (S.settings!.mode === 'voice' || !words.length)) head = [{ sentNote: act }]
-    else if (words.length) newQ = words.sort((a, b) => (a.k || 0) - (b.k || 0) || (a.id < b.id ? -1 : 1))
-      .slice(0, Math.max(0, Math.min(S.settings!.newday, S.settings!.newday - ((S.counts.n[countKey()]) || 0))))
+    if (neverSeen && (act.sHz || act.sMean)) {
+      head = [{ sentNote: act, teach: S.settings!.mode !== 'voice' }]
+      tail = words.length ? [{ sentNote: act }] : []
+      newQ = words
+    } else if (words.length) newQ = words
     else if (!S.progress['S' + act.id] && sentReady(act)) head = [{ sentNote: act }]
   }
-  let q = S.settings!.newafter ? [...head, ...revN, ...sentDue, ...newQ] : [...head, ...newQ, ...revN, ...sentDue]
-  // bury siblings: same hanzi only once per session (sent items keyed separately)
+  let q = S.settings!.newafter ? [...head, ...revN, ...sentDue, ...newQ, ...tail] : [...head, ...newQ, ...tail, ...revN, ...sentDue]
+  // bury siblings: same hanzi once per session — teach/practice sentence variants keyed apart
   const seen = new Set<string>()
-  q = q.filter(n => { const k = 'sentNote' in n ? 'S' + n.sentNote.id : normHz(n.hanzi); if (seen.has(k)) return false; seen.add(k); return true })
+  q = q.filter(n => { const k = 'sentNote' in n ? (n.teach ? 'S' + n.sentNote.id + 'T' : 'S' + n.sentNote.id) : normHz(n.hanzi); if (seen.has(k)) return false; seen.add(k); return true })
   return q
 }
 

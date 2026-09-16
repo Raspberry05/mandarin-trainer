@@ -70,14 +70,28 @@ export function renderRail() {
 }
 
 /* ---------- view switching ---------- */
-export function showHome() {
+/* ---------- hash breadcrumbs: #home · #deck/<id> · #study/<id>/<level|all> — browser back works ---------- */
+function navTo(h: string) { if (location.hash === h) renderRoute(); else location.hash = h }
+function lvlHash(d: string, L: number | null) { return '#study/' + d + '/' + (L == null ? 'all' : L) }
+export function renderRoute() {
+  const h = location.hash || '#home'
+  if (h.startsWith('#deck/')) showDeckPage(decodeURIComponent(h.slice(6)), true)
+  else if (h.startsWith('#study/')) {
+    const [d, l] = h.slice(7).split('/')
+    const dd = decodeURIComponent(d)
+    startDeck(dd, l === 'all' || !l ? null : (+l || null), true)
+  } else showHome(true)
+}
+export function showHome(fromHash = false) {
+  if (!fromHash && location.hash !== '#home') { location.hash = '#home'; return }
   S.view = 'home'; $('home-view')!.style.display = ''; $('study-view')!.style.display = 'none'
   $('deck-page')!.style.display = 'none'; $('deck-grid')!.style.display = ''
   $('home-drop')!.style.display = ''; $('import-status')!.style.display = ''
   $('back-btn')!.style.display = 'none'; $('reset-card-btn')!.style.display = 'none'; renderTop(); renderHome()
 }
 /* ---------- deck page: HSK 1–6 sub-deck picker ---------- */
-export function showDeckPage(d: string) {
+export function showDeckPage(d: string, fromHash = false) {
+  if (!fromHash) { navTo('#deck/' + encodeURIComponent(String(d))); return }
   S.view = 'deckpage'; S.studyDeck = d
   S.decksOn = {}; S.decksOn[d] = true; saveSettings(); S.sentSeen.clear()
   $('home-view')!.style.display = ''; $('study-view')!.style.display = 'none'
@@ -120,14 +134,19 @@ export function showDeckPage(d: string) {
 }
 export function enterLevel(d: string, L: number | null) {
   S.levelFilter[String(d)] = L
-  $('deck-page')!.style.display = 'none'; $('deck-grid')!.style.display = ''
-  $('home-drop')!.style.display = ''; $('import-status')!.style.display = ''
-  startDeck(d)
+  navTo(lvlHash(String(d), L))
 }
-export function startDeck(d: string) {
-  S.view = 'study'; S.studyDeck = d; S.decksOn = {}; S.decksOn[d] = true; saveSettings(); S.sentSeen.clear()
+export function startDeck(d: string, L: number | null = (S.levelFilter[String(d)] ?? null), fromHash = false) {
+  if (!fromHash) { S.levelFilter[String(d)] = L; navTo(lvlHash(String(d), L)); return }
+  S.view = 'study'
+  const key = d + ':' + (L == null ? 'all' : L)
+  if ((S as any)._deckKey !== key) { S.sentSeen.clear(); (S as any)._deckKey = key }
+  S.studyDeck = d; S.levelFilter[String(d)] = L
+  S.decksOn = {}; S.decksOn[d] = true; saveSettings()
   S.stage = 0
   $('home-view')!.style.display = 'none'; $('study-view')!.style.display = ''
+  $('deck-page')!.style.display = 'none'; $('deck-grid')!.style.display = ''
+  $('home-drop')!.style.display = 'none'; $('import-status')!.style.display = 'none'
   $('back-btn')!.style.display = ''; $('reset-card-btn')!.style.display = ''; statsView()
   renderTop()
   renderDeckbar()
@@ -316,6 +335,9 @@ function reviewPast() { const live = liveNotes()
 function route() {
   const e = S.queue[0]
   if (e && 'sentNote' in e) { S.cur = e.sentNote
+    if (e.teach && !S.progress['S' + S.cur.id] && !S.sentSeen.has(S.cur.id) && !voice()) {
+      S.sentSeen.add(S.cur.id); showSentIntro(); return }
+    if (!S.progress['S' + S.cur.id] && !S.sentSeen.has(S.cur.id) && voice()) S.sentSeen.add(S.cur.id) // voice question counts as seen
     S.progress['S' + S.cur.id] ? showSentTest() : showSentQ(); return }
   S.cur = e as Note
   if (!(S.cur as Note).hanzi) { S.queue.shift(); if (!S.queue.length) { idler(); return } route(); return }
@@ -698,6 +720,7 @@ export function init() {
   const prime = () => { try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u) } catch (e) {} }
   document.addEventListener('click', prime, { once: true })
 
+  window.addEventListener('hashchange', renderRoute)
   boot()
 }
 async function boot() {
@@ -708,12 +731,12 @@ async function boot() {
   loadBuild(); setInterval(renderBuild, 30000)
   try { diag('boot: loading saved decks…')
     await loadStored()
-    showHome()
+    renderRoute()
     diag('boot: loading bundled curricula…')
     const added = await loadBundled()
-    showHome()
+    renderRoute()
     diag(`boot done: notes=${S.notes.length} decks=${new Set(S.notes.map(n => n.deckId)).size} bundled=${added}`) }
-  catch (e) { diag('boot failed: ' + e); showHome()
+  catch (e) { diag('boot failed: ' + e); renderRoute()
     document.getElementById('import-status')!.innerHTML = '⚠ startup issue: ' + esc(String(e)) + ' — refresh the page; if it repeats, report this text.' }
 }
 

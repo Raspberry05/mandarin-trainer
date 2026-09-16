@@ -16,7 +16,7 @@ export interface Settings {
   mode?: 'silent' | 'voice' | 'chat'; ttspref?: 'auto' | 'local' | 'google' | 'eleven' | 'openai'
   elevenKey?: string; elevenVoice?: string; elevenVoiceEn?: string; openaiKey?: string
 }
-export type QItem = Note | { sentNote: Note }
+export type QItem = Note | { sentNote: Note; teach?: boolean }
 
 /* ---------- storage ---------- */
 export const LS = { p: 'ast_progress', s: 'ast_settings', pr: 'ast_presets', c: 'ast_counts', bdo: 'ast_bundled_off', lastmod: 'ast_lastmod' }
