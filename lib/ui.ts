@@ -1,6 +1,6 @@
 "use strict"
 import { S, $, esc, today, diag, rollCounts, pOf, persist, isDue, hskLevel, lessons, liveNotes, activeNote, sentReady, sentComplete, sentWords, sHzHas, load, save, LS, type Note, type Prog, type QItem, type Settings } from './state'
-import { imgSrc, fallbackArt, playAudio, playSent, soundUrl, pickVoice, speak } from './audio'
+import { imgSrc, fallbackArt, playAudio, playSent, soundUrl, pickVoice, speak, killAudio } from './audio'
 import { voiceTest, killVoice, voiceMode as voice } from './voice'
 import { buildQueue, grade, gradeSent } from './srs'
 import { saveAll, loadStored } from './idb'
@@ -31,35 +31,29 @@ export function statsView() {
 
 /* ---------- inline SVG icon set (animated via globals.css keyframes) — now in dom.ts as I ---------- */
 /* ---------- HSK level cover art + descriptions (inline SVG scenes, no assets) ---------- */
-const LVL_SCENES: Record<number, { g: [string, string]; title: string; desc: string; ic: string }> = {
-  1: { g: ['#00d68f', '#00916e'], title: 'First Steps', desc: 'Greetings, numbers, family, food and simple asks — the ~150 words that start everyday Mandarin.',
+const LVL_SCENES: Record<number, { g: [string, string]; title: string; desc: string; e: [string, string]; ic: string }> = {
+  1: { g: ['#00d68f', '#00916e'], title: 'First Steps', e: ['🐼', '🎋'], desc: 'Greetings, numbers, family, food and simple asks — the ~150 words that start everyday Mandarin.',
     ic: `<g class="ic-float"><circle cx="-13" cy="-13" r="7" fill="#26343f"/><circle cx="13" cy="-13" r="7" fill="#26343f"/><ellipse cx="0" cy="0" rx="15" ry="12.5" fill="#fff"/><ellipse cx="-6" cy="-2" rx="4.4" ry="5.4" fill="#26343f" transform="rotate(-18 -6 -2)"/><ellipse cx="6" cy="-2" rx="4.4" ry="5.4" fill="#26343f" transform="rotate(18 6 -2)"/><circle cx="-6" cy="-3" r="1.5" fill="#fff"/><circle cx="6" cy="-3" r="1.5" fill="#fff"/><ellipse cx="0" cy="4.6" rx="2.3" ry="1.7" fill="#26343f"/><path d="M-3 7.5 Q0 10.5 3 7.5" stroke="#26343f" stroke-width="1.6" fill="none" stroke-linecap="round"/></g>` },
-  2: { g: ['#ff9a3d', '#e02f5c'], title: 'Simple Chats', desc: 'Shopping, time, directions and weather — hold basic conversations with ~300 words.',
+  2: { g: ['#ff9a3d', '#e02f5c'], title: 'Simple Chats', e: ['🏮', '🧧'], desc: 'Shopping, time, directions and weather — hold basic conversations with ~300 words.',
     ic: `<g class="ic-sway"><rect x="-6.5" y="-20" width="13" height="4" rx="1.5" fill="#ffb300"/><ellipse cx="0" cy="-4" rx="13.5" ry="11.5" fill="#ff5a7a"/><ellipse cx="0" cy="-4" rx="13.5" ry="11.5" fill="none" stroke="#c2185b" stroke-width="1.4" opacity=".85"/><ellipse cx="0" cy="-4" rx="5.5" ry="11.5" fill="none" stroke="#c2185b" stroke-width="1.1" opacity=".85"/><ellipse cx="0" cy="-4" rx="10" ry="11.5" fill="none" stroke="#c2185b" stroke-width="1" opacity=".6"/><line x1="0" y1="7.5" x2="0" y2="14" stroke="#ffb300" stroke-width="2"/><circle cx="0" cy="16.5" r="2.4" fill="#ffb300"/></g>` },
-  3: { g: ['#b249ff', '#5b21b6'], title: 'Daily Life Flow', desc: 'Opinions, plans, stories and small talk — get around daily life with ~600 words.',
+  3: { g: ['#b249ff', '#5b21b6'], title: 'Daily Life Flow', e: ['🐉', '☁️'], desc: 'Opinions, plans, stories and small talk — get around daily life with ~600 words.',
     ic: `<g class="ic-wiggle"><path d="M-15 10 Q-7 -12 3 0 Q12 11 16 -4" stroke="#c68aff" stroke-width="7" fill="none" stroke-linecap="round"/><circle cx="17" cy="-6" r="7.5" fill="#b249ff"/><path d="M13 -12 L16 -19 L19.5 -12 Z" fill="#00e676"/><circle cx="18.5" cy="-7" r="2.1" fill="#fff"/><circle cx="19.2" cy="-7" r="1" fill="#10131f"/></g>` },
-  4: { g: ['#ff4b8b', '#c2185b'], title: 'Ideas & Culture', desc: 'Work, culture and abstract topics — discuss ideas, not just things, with ~1,200 words.',
+  4: { g: ['#ff4b8b', '#c2185b'], title: 'Ideas & Culture', e: ['🌸', '🏯'], desc: 'Work, culture and abstract topics — discuss ideas, not just things, with ~1,200 words.',
     ic: `<g class="ic-spin"><ellipse cx="0" cy="-8.5" rx="4.2" ry="9" fill="#ff7ab8"/><ellipse cx="0" cy="-8.5" rx="4.2" ry="9" fill="#ff7ab8" transform="rotate(72)"/><ellipse cx="0" cy="-8.5" rx="4.2" ry="9" fill="#ff7ab8" transform="rotate(144)"/><ellipse cx="0" cy="-8.5" rx="4.2" ry="9" fill="#ff7ab8" transform="rotate(216)"/><ellipse cx="0" cy="-8.5" rx="4.2" ry="9" fill="#ff7ab8" transform="rotate(288)"/><circle cx="0" cy="0" r="4.6" fill="#ffb300"/></g>` },
-  5: { g: ['#00c2ff', '#1e5fd0'], title: 'Fluent Discussion', desc: 'News, films, debates and interviews — follow real media with ~2,500 words.',
+  5: { g: ['#00c2ff', '#1e5fd0'], title: 'Fluent Discussion', e: ['📺', '🎙️'], desc: 'News, films, debates and interviews — follow real media with ~2,500 words.',
     ic: `<g><rect x="-20" y="-13" width="40" height="27" rx="6.5" fill="#12274d" stroke="#00c2ff" stroke-width="2.2"/><path d="M-15 -4.5 L-7 0 L-15 4.5 Z" fill="#00c2ff" class="ic-pulse"/><rect x="2" y="-7" width="3.4" height="14" rx="1.7" fill="#00e676" class="ic-eq"/><rect x="8" y="-4" width="3.4" height="8" rx="1.7" fill="#00e676" class="ic-eq eq-b2"/><rect x="14" y="-9" width="3.4" height="18" rx="1.7" fill="#00e676" class="ic-eq eq-b3"/></g>` },
-  6: { g: ['#ffb300', '#c2410c'], title: 'Mastery & Nuance', desc: 'Literature, idioms and fine shades of meaning — the ~5,000-word summit.',
+  6: { g: ['#ffb300', '#c2410c'], title: 'Mastery & Nuance', e: ['🖌️', '🏞️'], desc: 'Literature, idioms and fine shades of meaning — the ~5,000-word summit.',
     ic: `<g class="ic-wiggle"><rect x="-3.5" y="-20" width="7" height="24" rx="3" transform="rotate(24 0 -8)" fill="#ffb300"/><path d="M-2.5 2.5 L4.5 2.5 L1 14 Z" transform="rotate(24 0 -8)" fill="#26343f"/><circle cx="7" cy="17" r="3" fill="#b249ff" class="ic-pulse"/></g>` },
 }
-const ALL_SCENE = { g: ['#00c2ff', '#b249ff'] as [string, string],
-  ic: `<g><rect x="-17" y="-13" width="22" height="9" rx="2.6" fill="#00c2ff" class="ic-bob"/><rect x="-12" y="-2.5" width="25" height="9" rx="2.6" fill="#b249ff" class="ic-bob" style="animation-delay:.25s"/><rect x="-15" y="8" width="20" height="9" rx="2.6" fill="#ff4b8b" class="ic-bob" style="animation-delay:.5s"/></g>` }
+const ALL_SCENE = { g: ['#00c2ff', '#b249ff'] as [string, string], e: ['📚', '🧭'] }
 function lvlArt(L: number | string, all = false): string {
   const s = all ? ALL_SCENE : LVL_SCENES[+L]
   if (!s) return ''
-  const key = all ? 'all' : L
-  return `<svg viewBox="0 0 200 84" preserveAspectRatio="xMidYMid slice" role="img" aria-label="HSK ${all ? 'all levels' : L} illustration">
-    <defs><linearGradient id="lg${key}" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="${s.g[0]}"/><stop offset="1" stop-color="${s.g[1]}"/></linearGradient></defs>
-    <rect width="200" height="84" fill="url(#lg${key})"/>
-    <circle cx="174" cy="12" r="32" fill="rgba(255,255,255,.14)"/>
-    <circle cx="14" cy="80" r="26" fill="rgba(0,0,0,.16)"/>
-    <g transform="translate(58,44)">${s.ic}</g>
-    <text x="12" y="78" font-size="11" font-weight="900" fill="rgba(255,255,255,.92)" font-family="Nunito,sans-serif">${all ? 'ALL LEVELS' : 'HSK ' + L}</text>
-  </svg>`
+  const badge = all ? 'ALL LEVELS' : 'HSK ' + L
+  return `<div class="lvlart" style="--g0:${s.g[0]};--g1:${s.g[1]}">
+    <span class="lb">${badge}</span>
+    <span class="le le1">${s.e[0]}</span><span class="le le2">${s.e[1]}</span>
+  </div>`
 }
 
 /* ---------- curriculum rail ---------- */
@@ -122,6 +116,7 @@ export function renderRoute() {
 }
 export function showHome(fromHash = false) {
   if (!fromHash && location.hash !== '#home') { location.hash = '#home'; return }
+  killAudio() // leaving study — never let the old clip keep playing under home
   S.view = 'home'; $('home-view')!.style.display = ''; $('study-view')!.style.display = 'none'
   $('deck-page')!.style.display = 'none'; $('deck-grid')!.style.display = ''
   $('home-drop')!.style.display = ''; $('import-status')!.style.display = ''

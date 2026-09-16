@@ -125,6 +125,7 @@ export async function recordUtterance(maxMs = 6000, silenceMs = 800): Promise<Bl
     await new Promise<void>(res => {
       const tick = () => {
         const lvl = level()
+        document.documentElement.style.setProperty('--lvl', String(Math.min(1, lvl * 1.7).toFixed(3))) // voice viz glow
         if (lvl > 0.09) { spoke = true; quietSince = Date.now() }
         else if (spoke && !quietSince) quietSince = Date.now()
         const silent = spoke && quietSince && Date.now() - quietSince > silenceMs

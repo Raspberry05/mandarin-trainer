@@ -3,6 +3,18 @@ import { S, esc, diag, Note } from './state'
 import { getTts, putTts } from './idb'
 
 /* ---------- TTS & audio ---------- */
+/* single-live-audio rule: every playback takes the channel — returning to a page can no longer echo
+   the previous clip under the new one (committed fix for double-audio on revisit) */
+let liveA: HTMLAudioElement | null = null
+export function killAudio() {
+  try { liveA?.pause(); liveA?.removeAttribute('src') } catch (e) {}
+  liveA = null
+  try { speechSynthesis.cancel() } catch (e) {}
+}
+function hold(a: HTMLAudioElement) {
+  try { if (liveA && liveA !== a) { liveA.pause(); liveA.removeAttribute('src') } } catch (e) {}
+  liveA = a; return a
+}
 export function pickVoice() {
   const vs = speechSynthesis.getVoices()
   return vs.find(v => /zh[-_]CN/i.test(v.lang) && /natural|neural/i.test(v.name))
@@ -149,7 +161,7 @@ export function speak(text: string, lang = 'zh-CN', onend?: () => void) {
   const useGoogle = pref === 'google' || (pref !== 'local' && !natural)
   if (useGoogle) {
     try {
-      const a = new Audio(gUrl(text, lang.startsWith('zh') ? 'zh-CN' : 'en'))
+      const a = hold(new Audio(gUrl(text, lang.startsWith('zh') ? 'zh-CN' : 'en')))
       let done = false
       const finish = () => { if (done) return; done = true; if (onend) onend() }
       a.onended = () => finish()
@@ -167,7 +179,7 @@ function speakAsync(text: string, lang: string, onend?: () => void) {
   let done = false
   const fin = () => { if (done) return; done = true; onend?.() }
   elevenUrl(text, lang).then(u => u ? u : openaiUrl(text, lang)).then(u => {
-    if (u) { const a = new Audio(u); if (onend) a.onended = () => fin(); playOrFallback(a, text, lang, fin) }
+    if (u) { const a = hold(new Audio(u)); if (onend) a.onended = () => fin(); playOrFallback(a, text, lang, fin) }
     else ttsLocal(text, lang, lang.startsWith('zh') ? 0.9 : 1, fin)
   })
 }
@@ -195,11 +207,11 @@ export function fallbackArt(note: { sHz?: string; hanzi?: string; id: string }) 
 }
 export function playSound(note: Note) {
   const m = soundUrl(note)
-  if (m) { const a = new Audio(m); a.play().catch(() => speak(note.hanzi)); return true }
+  if (m) { hold(new Audio(m)).play().catch(() => speak(note.hanzi)); return true }
   return false
 }
 export function playAudio(note: Note) { if (!playSound(note)) speak(note.hanzi || note.pinyin) }
 export function playSent(n: Note) {
   const m = n.sSound && soundUrl({ sound: n.sSound })
-  if (m) { const a = new Audio(m); a.play().catch(() => speak(n.sHz || n.hanzi)) } else speak(n.sHz || n.hanzi)
+  if (m) { hold(new Audio(m)).play().catch(() => speak(n.sHz || n.hanzi)) } else speak(n.sHz || n.hanzi)
 }

@@ -30,6 +30,10 @@ export default function Page() {
           <div id="deck-grid"></div>
         </div>
         <div id="study-view" style={{display:'none'}}>
+          {/* mic-reactive background voice viz: ambient glow + vertical light columns */}
+          <div id="viz-glow" aria-hidden="true"></div>
+          <div id="viz-l" aria-hidden="true"></div>
+          <div id="viz-r" aria-hidden="true"></div>
           <div id="study-top">
             <div id="cur-lesson-wrap"><span className="hint">CURRENTLY STUDYING:</span><b id="cur-lesson"></b></div>
             <div id="top-prog"><div id="top-fill-track"><div id="top-fill"></div></div><span id="top-pct"></span></div>

@@ -41,15 +41,16 @@ export function voiceTest(target: string, pass: () => void, fail: () => void, io
   let meterH: MeterHandle | null = null
   let cmdGen = 0 // bumping kills any queued cmdLoop re-arm — no dual-listener mic contention
   const stopCmd = () => { cmdH?.stop(); cmdH = null; cmdGen++ }
-  const stopCmdAll = () => { stopCmd(); meterH?.stop(); meterH = null; micToken = tok + 1; vKill = null } // hard exit: voiceTest becomes a no-op
+  const stopCmdAll = () => { stopCmd(); meterH?.stop(); meterH = null; micToken = tok + 1; vKill = null; document.documentElement.style.setProperty('--lvl', '0') } // hard exit: voiceTest becomes a no-op
   const setMicState = (txt: string, ok: boolean) => { const ms = $('mic-state'); if (!ms) return
     ms.classList.toggle('ok', ok)
-    ms.innerHTML = `${I.mic(ok ? '#00e676' : '#ffb84d')}<span>${esc(txt)}</span>` }
+    ms.innerHTML = `${I.mic(ok ? '#00e676' : '#ffb84d')}<span>${esc(txt)}</span>`
+    if (!ok) document.documentElement.style.setProperty('--lvl', '0') }
   const startMeter = () => { if (meterH) return
     setMicState('mic connecting…', false)
-    micMeter(lvl => { const b = $('mic-bar'); if (b) b.style.width = Math.max(2, Math.min(100, lvl * 130)) + '%' })
+    micMeter(lvl => document.documentElement.style.setProperty('--lvl', String(Math.min(1, lvl * 1.7).toFixed(3))))
       .then(h => { meterH = h; if (h) setMicState('listening · mic connected', true)
-        else { ($('mic-bar-wrap') as HTMLElement).style.opacity = '.35'; setMicState('mic blocked — allow microphone access', false) } }) }
+        else setMicState('mic blocked — allow microphone access', false) }) }
   let tries = 0, echo = false, noSpeechStreak = 0
   // ASR engine: browser Web Speech first; after 2 consecutive no-speech (or setting asr=eleven) use ElevenLabs Scribe
   const useEleven = () => S.settings?.asr === 'eleven' || (S.settings?.asr !== 'browser' && noSpeechStreak >= 2)
@@ -83,7 +84,6 @@ export function voiceTest(target: string, pass: () => void, fail: () => void, io
     ${rv ? `<div id="reveal-card" style="display:none"><span class="rlbl">correct answer</span><span class="rhz">${esc(rv.hz)}</span><span class="rpy">${esc(rv.py)}</span></div>` : ''}
     <div id="live-hz"></div>
     <div id="mic-line" class="hint" style="font-size:17px;min-height:26px"></div>
-    <div id="mic-bar-wrap"><div id="mic-bar"></div></div>
     <div id="cmd-row">
       <button id="cmd-susp">⏸ Suspend please<span class="zh">請暫停卡片</span></button>
       <button id="cmd-pass">→ Pass please<span class="zh">請跳過</span></button>
