@@ -14,7 +14,7 @@ export interface Settings {
   noautoplay: boolean; waitaudio: boolean; maxsec: number; newsrt: string; revsrt: string
   newafter: boolean; ret: number; maxivl: number
   mode?: 'silent' | 'voice' | 'chat'; ttspref?: 'auto' | 'local' | 'google' | 'eleven' | 'openai'
-  elevenKey?: string; elevenVoice?: string; openaiKey?: string
+  elevenKey?: string; elevenVoice?: string; elevenVoiceEn?: string; openaiKey?: string
 }
 export type QItem = Note | { sentNote: Note }
 
@@ -63,7 +63,7 @@ export const S = {
 if (!S.settings) { S.settings = { ...DEF }; S.presets = { 'Default': { ...DEF } as Settings }; save(LS.pr, S.presets); save(LS.s, S.settings) }
 if (!S.settings!.mode) S.settings!.mode = 'silent'
 if (!S.settings!.ttspref) S.settings!.ttspref = 'auto'
-if (!S.settings!.elevenVoice) S.settings!.elevenVoice = 'JBFqnCBsd6RMkjVDRZzb'
+  if (!S.settings!.elevenVoice || S.settings!.elevenVoice === 'JBFqnCBsd6RMkjVDRZzb') S.settings!.elevenVoice = 'Xb7hH8MSUJpSbSDYk0k2' // zh default: Alice (George stays for EN)
 if (!localStorage.getItem('ast_modeflip')) { S.settings!.mode = 'voice'; localStorage.setItem('ast_modeflip', '1') }
 /* auracle learn sequence: one user who never touched old default gets 1m 5m 1d (3 recalls → graduate next day) */
 if (S.settings!.steps === '5s 50s 2m') S.settings!.steps = '1m 5m 1d'

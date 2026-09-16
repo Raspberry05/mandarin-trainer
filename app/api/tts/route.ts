@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   if (engine === 'eleven') {
     const key = process.env.ELEVENLABS_API_KEY
     if (!key) return new Response('ELEVENLABS_API_KEY not configured', { status: 501 })
-    const voice = String(b?.voice || 'JBFqnCBsd6RMkjVDRZzb')
+    const voice = String(b?.voice || 'Xb7hH8MSUJpSbSDYk0k2')
     const model = lang.startsWith('zh') ? 'eleven_multilingual_v2' : 'eleven_flash_v2_5'
     const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voice)}?output_format=mp3_44100_128`,
       { method: 'POST', headers: { 'xi-api-key': key, 'Content-Type': 'application/json' },

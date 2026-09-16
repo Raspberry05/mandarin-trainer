@@ -55,10 +55,11 @@ function fetchTtsCached(cache: Map<string, string>, k: string, url: string, init
   return run
 }
 async function elevenUrl(text: string, lang: string): Promise<string | null> {
-  /* two voices: EN questions (default Rachel) vs ZH answers (default Alice / settings override) */
+  /* two voices: EN questions (default George) vs ZH answers (default Alice / settings override).
+     Jason Chen DowyQ68vDpgFYdWVGjc3 (native Beijing Mandarin) is premium — 402 on free tier. */
   const zh = lang.startsWith('zh')
-  const voice = zh ? (S.settings?.elevenVoice || 'Xb7hH8MSUJpSbXTYULwt').trim()
-    : (S.settings?.elevenVoiceEn || '21m00Tcm4TlvDq8ikWAM').trim()
+  const voice = zh ? (S.settings?.elevenVoice || 'Xb7hH8MSUJpSbSDYk0k2').trim()
+    : (S.settings?.elevenVoiceEn || 'JBFqnCBsd6RMkjVDRZzb').trim()
   const model = zh ? 'eleven_multilingual_v2' : 'eleven_flash_v2_5'
   const key = EL_KEY()
   const init: RequestInit = key
