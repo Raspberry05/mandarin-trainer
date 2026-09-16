@@ -33,11 +33,14 @@ const gCache = new Map<string, string>()
    (ELEVENLABS_API_KEY / OPENAI_API_KEY — server-only, never shipped to the client) */
 const EL_KEY = () => S.settings?.elevenKey || ''
 const OAI_KEY = () => S.settings?.openaiKey || ''
-/* premium AI voices: persistent cache (IndexedDB) + in-flight dedupe — each unique phrase is synthesized exactly once, ever */
+/* premium AI voices: persistent cache (IndexedDB) + in-flight dedupe + session failure cache —
+   each unique phrase is synthesized exactly once; failed engine attempts aren't retried this page-load */
 const eCache = new Map<string, string>()
 const oCache = new Map<string, string>()
 const inFlight = new Map<string, Promise<string | null>>()
+const ttsFailed = new Set<string>()
 function fetchTtsCached(cache: Map<string, string>, k: string, url: string, init: RequestInit): Promise<string | null> {
+  if (ttsFailed.has(k)) return Promise.resolve(null)
   const hit = cache.get(k); if (hit) return Promise.resolve(hit)
   const live = inFlight.get(k); if (live) return live
   const run = (async () => {
@@ -45,11 +48,11 @@ function fetchTtsCached(cache: Map<string, string>, k: string, url: string, init
     if (idbHit) { const u = URL.createObjectURL(idbHit); cache.set(k, u); return u }
     try {
       const r = await fetch(url, init)
-      if (!r.ok) return null
+      if (!r.ok) { ttsFailed.add(k); return null }
       const b = await r.blob()
       putTts(k, b)
       const u = URL.createObjectURL(b); cache.set(k, u); return u
-    } catch (e) { return null }
+    } catch (e) { ttsFailed.add(k); return null }
   })()
   inFlight.set(k, run); run.finally(() => inFlight.delete(k))
   return run
@@ -94,15 +97,13 @@ function gUrl(text: string, lang: string) {
   if (!u) { u = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${lang}&q=${encodeURIComponent(text)}`; gCache.set(k, u) }
   return u
 }
-/* speak: best available engine — natural device voice, else Google TTS */
+/* speak: engine chain — user key direct call, else /api/tts proxy (server env ElevenLabs/OpenAI), else Google/device */
 export function speak(text: string, lang = 'zh-CN', onend?: () => void) {
   if (!text) { onend?.(); return }
   const pref = S.settings?.ttspref || 'auto'
-  const zh = lang.startsWith('zh')
-  /* auto mode with keys: premium for both voices — EN question voice (Rachel) vs ZH answer voice (Alice) */
-  const wantEleven = !!EL_KEY() && (pref === 'eleven' || pref === 'auto')
-  const wantOpenai = !!OAI_KEY() && (pref === 'openai' || (pref === 'auto' && !EL_KEY()))
-  if (wantEleven || wantOpenai) {
+  if (pref === 'auto' || pref === 'eleven' || pref === 'openai') {
+    /* auto/eleven/openai always try the async chain: elevenUrl uses the user's key when present,
+       otherwise POSTs /api/tts (server ELEVENLABS_API_KEY) — failures fall through to openai then local */
     speakAsync(text, lang, onend); return
   }
   const v = lang.startsWith('zh') ? pickVoice() : pickEnVoice()
