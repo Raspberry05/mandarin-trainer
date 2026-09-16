@@ -70,38 +70,33 @@ export function voiceTest(target: string, pass: () => void, fail: () => void, io
     setActions(btn('✅ I know it', 'g-next', pass, 'enter'), btn('❌ I don\'t know it', 'g-again', fail))
     return
   }
-  const upNext = () => {
-    const rows = S.queue.slice(0, 6).map((e, ix) => {
-      const n = 'sentNote' in e ? e.sentNote : e
-      const m = isSent ? (n.sMean || n.sHz) : (n.meaning || n.pinyin)
-      const t = ix === 0 ? '· now' : ''
-      return `<div class="qrow${ix === 0 ? ' now' : ''}"><span class="qn">${ix + 1}</span><span>${esc(m || n.hanzi)}</span>${t ? `<span class="hint">${t}</span>` : ''}</div>` })
-    return rows.length > 1 ? `<div class="qlist"><div class="hint" style="text-align:left">up next</div>${rows.join('')}</div>` : ''
-  }
   promptAppend(`<div id="att-list"></div>
     <div id="q-card"><span class="qz">${esc(qText)}</span><span class="qint">${fmtIvl()}</span></div>
     ${rv ? `<div id="reveal-card" style="display:none"><span class="rlbl">correct answer</span><span class="rhz">${esc(rv.hz)}</span><span class="rpy">${esc(rv.py)}</span></div>` : ''}
+    <div id="live-hz"></div>
     <div id="mic-line" class="hint" style="font-size:17px;min-height:26px"></div>
     <div id="mic-bar-wrap"><div id="mic-bar"></div></div>
     <div id="cmd-row">
       <button id="cmd-susp">⏸ Suspend please<span class="zh">請暫停卡片</span></button>
       <button id="cmd-pass">→ Pass please<span class="zh">請跳過</span></button>
     </div>
-    <div id="mic-ctl" class="btnrow"></div>` + upNext())
+    <div id="mic-ctl" class="btnrow"></div>`)
   const line = $('mic-line')!, ctl = $('mic-ctl')!
   const ms = $('mic-state'); if (ms) ms.classList.remove('ok')
   startMeter()
-  const replay = btn('🔊 Replay question', undefined, () => { sayQ() })
   const arm = () => { if (tok !== micToken) return
     ctl.innerHTML = ''; line.textContent = echo ? '🎙 echo it — say the answer out loud' : '🎙 listening… say it in Mandarin' }
   const listenOnce = () => { if (tok !== micToken) return
     stopCmd()
+    const hzEl = $('live-hz'); if (hzEl) hzEl.textContent = ''
     line.textContent = echo ? '🎙 echo it — say the answer out loud' : '🎙 listening… say it in Mandarin'
     let h: ListenHandle | null = null
     setTimeout(() => { // let the question audio fully finish — mic must not hear the TTS tail
       if (tok !== micToken) return
       h = listenZh(
-      t => { if (tok === micToken) line.textContent = '🎙 ' + t },
+      t => { if (tok !== micToken) return // live transcript — show the characters as they're recognized
+        const hzEl = $('live-hz'); if (hzEl) hzEl.textContent = t
+        line.textContent = echo ? '🎙 echo it — say the answer out loud' : '🎙 listening… say it in Mandarin' },
       t => { if (tok !== micToken) return
         const sim = similarity(t, target)
         if (sim >= PASS) {
@@ -117,7 +112,7 @@ export function voiceTest(target: string, pass: () => void, fail: () => void, io
         if (!echo && tries < 2 && /catch anything|no-speech/i.test(String(e))) {
           tries++; line.textContent = "🎙 didn't catch anything — listening again…"
           setTimeout(() => { if (tok === micToken) listenOnce() }, 900); return }
-        line.textContent = '⚠ ' + e; ctl.innerHTML = ''; ctl.appendChild(replay); cmdLoop() })
+        line.textContent = '⚠ ' + e; cmdLoop() })
     }, 450)
   }
   const reAttempt = (heard?: string, sim = 0) => {

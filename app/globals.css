@@ -192,6 +192,8 @@ body.mode-chat #cardbox { max-width:720px; margin:0 auto }
 #cmd-row { display:flex; gap:12px; justify-content:center; margin-top:12px; flex-wrap:wrap }
 #cmd-row button { min-height:46px; font-weight:800; letter-spacing:.05em; text-transform:uppercase }
 #cmd-row button .zh { display:block; font-size:12px; font-weight:500; text-transform:none; letter-spacing:0; opacity:.75 }
+#live-hz { min-height:52px; text-align:center; font-size:36px; font-weight:750; color:#e8edf3; letter-spacing:.06em; margin-top:12px }
+#live-hz:empty::before { content:'🎙 —'; font-size:20px; font-weight:500; color:var(--dim) }
 @media (max-width:760px) {
   #study-top { padding:10px 12px; gap:8px }
   #cur-lesson { font-size:15px }
