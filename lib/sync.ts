@@ -34,4 +34,4 @@ export async function sbInit() {
 }
 
 export function sbBtnLabel() { const b = document.getElementById('auth-btn'); if (!b) return
-  b.textContent = S.sbUser ? '⬥ ' + String(S.sbUser.email || '').split('@')[0] : '👤 Sign in' }
+  b.textContent = S.sbUser ? '⬥ ' + String(S.sbUser.email || '').split('@')[0] : '👤 Sign in / Sign up' }

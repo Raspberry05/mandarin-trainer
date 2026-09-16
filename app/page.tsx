@@ -14,7 +14,7 @@ export default function Page() {
         <input type="file" id="file-in" accept=".apkg,.colpkg,.txt,.csv" multiple hidden />
         <button id="settings-btn">⚙ Settings</button>
         <button id="reset-card-btn" title="Erase ALL progress for this deck and start over">♻ Reset deck</button>
-        <button id="auth-btn">👤 Sign in</button>
+        <button id="auth-btn">👤 Sign in / Sign up</button>
       </header>
       <main>
         <div id="home-view">
@@ -95,8 +95,8 @@ export default function Page() {
 
       <div className="modal" id="auth-modal">
         <div className="mbox">
-          <h2>👤 Sign in</h2>
-          <p className="hint">sync your progress across devices (phone ↔ desktop). we email you a one-time code — no password.</p>
+          <h2>👤 Sign in / Sign up</h2>
+          <p className="hint">sync your progress across devices (phone ↔ desktop). we email you a one-time code — no password. new email? you're signed up automatically.</p>
           <div className="row"><label>Email</label><input type="email" id="auth-email" placeholder="you@example.com" /></div>
           <div className="row" id="auth-code-wrap" style={{display:'none'}}><label>6-digit code</label><input type="text" id="auth-code" inputMode="numeric" maxLength={8} placeholder="123456" /></div>
           <div className="btnrow" style={{marginTop:'14px'}}>

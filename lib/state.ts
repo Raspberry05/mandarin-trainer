@@ -53,7 +53,7 @@ export const S = {
   sentSeen: new Set<string>(),
   pqItems: [] as Note[],
   pqIdx: 0,
-  BUILD_DATE: 1789528786,
+  BUILD_DATE: 1789531390,
 }
 if (!S.settings) { S.settings = { ...DEF }; S.presets = { 'Default': { ...DEF } as Settings } ; save(LS.pr, S.presets); save(LS.s, S.settings) }
 if (typeof S.counts.n === 'number' || typeof S.counts.r === 'number') S.counts = { d: S.counts.d, n: {}, r: {} }
