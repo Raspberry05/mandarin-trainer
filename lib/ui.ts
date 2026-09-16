@@ -24,6 +24,7 @@ export function statsView() {
   $('st-rev')!.textContent = rToday + '/' + S.settings!.maxrev
   $('st-queue')!.textContent = due + (nLeft ? ` (+${Math.min(nLeft, newLeft)} new)` : '')
   $('st-leech')!.textContent = String(S.notes.filter(n => S.progress[n.id]?.leech).length)
+  renderTop()
   renderRail()
 }
 
@@ -71,13 +72,14 @@ export function renderRail() {
 /* ---------- view switching ---------- */
 export function showHome() {
   S.view = 'home'; $('home-view')!.style.display = ''; $('study-view')!.style.display = 'none'
-  $('back-btn')!.style.display = 'none'; $('reset-card-btn')!.style.display = 'none'; renderHome()
+  $('back-btn')!.style.display = 'none'; $('reset-card-btn')!.style.display = 'none'; renderTop(); renderHome()
 }
 export function startDeck(d: string) {
   S.view = 'study'; S.studyDeck = d; S.decksOn = {}; S.decksOn[d] = true; saveSettings(); S.sentSeen.clear()
   S.stage = 0
   $('home-view')!.style.display = 'none'; $('study-view')!.style.display = ''
   $('back-btn')!.style.display = ''; $('reset-card-btn')!.style.display = ''; statsView()
+  renderTop()
   renderDeckbar()
   if (deckFresh()) placementOffer(); else idler()
 }
@@ -86,13 +88,35 @@ function deckFresh() {
   return !!ns.length && ns.every(n => !S.progress[n.id])
 }
 
+/* ---------- auracle-style top bar: lesson name · progress · counts · mode pills ---------- */
+let vKill: (() => void) | null = null // current voice session hard-stop (voiceTest/chat)
+export function renderTop() {
+  if (typeof document === 'undefined') return
+  const b = document.body
+  b.classList.toggle('study', S.view !== 'home')
+  const ns = S.notes.filter(n => String(n.deckId) === String(S.studyDeck))
+  const el = $('cur-lesson'); if (el) el.textContent = ns.length ? (ns[0]!.deck || String(S.studyDeck)) : ''
+  if (ns.length) {
+    const learned = ns.filter(n => S.progress[n.id]?.state === 'review').length
+    const learning = ns.filter(n => { const s = S.progress[n.id]?.state; return s === 'learn' || s === 'relearn' }).length
+    const news = ns.length - learned - learning
+    const pct = Math.round(learned / ns.length * 100)
+    const fill = $('top-fill'); if (fill) fill.style.width = pct + '%'
+    const tp = $('top-pct'); if (tp) tp.textContent = pct + '% MASTERED'
+    const ch = $('top-chips')
+    if (ch) ch.innerHTML = `<span class="c-new">● new ${news}</span><span class="c-lrn">● learning ${learning}</span><span class="c-lrd">● learned ${learned}</span>`
+  } else { const tp = $('top-pct'); if (tp) tp.textContent = ''; const ch = $('top-chips'); if (ch) ch.innerHTML = ''; const f = $('top-fill'); if (f) f.style.width = '0%' }
+  const m = S.settings!.mode || 'silent'
+  ;['silent', 'voice', 'chat'].forEach(k => { const p = $('mp-' + k); if (p) p.classList.toggle('on', m === k) })
+}
+
 /* ---------- prompt / actions helpers ---------- */
 function btn(label: string, cls?: string, fn?: () => void, key?: string) {
   const b = document.createElement('button')
   b.textContent = label; if (cls) b.className = cls; if (key) b.dataset.key = key; b.onclick = fn!; return b
 }
 export function setActions(...bs: (HTMLButtonElement | null)[]) { const a = $('actions')!; a.innerHTML = ''; bs.filter(Boolean).forEach(b => a.appendChild(b!)) }
-function setPrompt(html: string) { $('prompt')!.innerHTML = html }
+function setPrompt(html: string) { $('prompt')!.innerHTML = html; renderTop() }
 function fbClear() { const f = $('feedback')!; f.textContent = ''; f.className = '' }
 function stopTimer() { clearInterval(S.timerInt); S.timerInt = null; $('timer')!.textContent = '' }
 function startTimer() {
@@ -129,16 +153,27 @@ function voiceTest(target: string, pass: () => void, fail: () => void) {
   const tok = ++micToken
   const isSent = S.stage === 4 || S.stage === 5 || S.stage === 6
   const sayAnswer = () => { const n = S.cur!; if (isSent) playSent(n); else playAudio(n) }
-  const sayQ = (cb?: () => void) => speak(naturalAsk(S.cur, target, isSent), 'en', cb)
+  const qText = naturalAsk(S.cur, target, isSent)
+  const sayQ = (cb?: () => void) => speak(qText, 'en', cb)
+  const rv = S.cur!.hanzi ? (isSent ? { hz: S.cur!.sHz, py: S.cur!.sPy } : { hz: S.cur!.hanzi, py: S.cur!.pinyin }) : null
   let cmdH: ListenHandle | null = null
   let meterH: MeterHandle | null = null
   let cmdGen = 0 // bumping kills any queued cmdLoop re-arm — no dual-listener mic contention
   const stopCmd = () => { cmdH?.stop(); cmdH = null; cmdGen++ }
+  const stopCmdAll = () => { stopCmd(); meterH?.stop(); meterH = null; micToken = tok + 1; vKill = null } // hard exit: voiceTest becomes a no-op
   const startMeter = () => { if (meterH) return
+    const ms = $('mic-state'); if (ms) ms.textContent = 'mic connecting…'
     micMeter(lvl => { const b = $('mic-bar'); if (b) b.style.width = Math.max(2, Math.min(100, lvl * 130)) + '%' })
-      .then(h => { meterH = h; if (!h && $('mic-bar')) ($('mic-bar-wrap') as HTMLElement).style.opacity = '.35' }) }
-  const stopCmdAll = () => { stopCmd(); meterH?.stop(); meterH = null; micToken = tok + 1 } // hard exit: voiceTest becomes a no-op
+      .then(h => { meterH = h; if (h) { if (ms) { ms.classList.add('ok'); ms.textContent = '🎙 listening · mic connected' } }
+        else { ($('mic-bar-wrap') as HTMLElement).style.opacity = '.35'; if (ms) { ms.classList.remove('ok'); ms.textContent = '⚠ mic blocked — allow microphone access' } } }) }
   let tries = 0, echo = false
+  const atts: { t: string; sim: number; ok?: boolean }[] = []
+  const renderAtt = () => { const el = $('att-list'); if (!el) return
+    el.innerHTML = atts.map((a, i) => `<div class="att${i === atts.length - 1 ? ' now' : ''}"><span class="${a.ok ? 'ok' : 'x'}">${a.ok ? '✓' : '✗'}</span><span>“${esc(a.t)}”</span><span class="hint" style="margin-left:auto">${Math.round(a.sim * 100)}%</span></div>`).join('') }
+  const fmtIvl = () => { const p = isSent ? S.progress['S' + S.cur!.id] : S.progress[S.cur!.id]
+    if (!p || p.state === 'new') return 'new'
+    if ((p.ivl || 0) < 1) return Math.max(1, Math.round((p.ivl || 0.01) * 1440)) + 'm'
+    return Math.round(p.ivl) + 'd' }
   function onCommand(c: Cmd) {
     if (tok !== micToken) return
     if (c === 'again') { stopCmd(); line.textContent = '🔁 repeating the question…'; sayQ(() => { if (tok === micToken) listenOnce() }); return }
@@ -149,7 +184,6 @@ function voiceTest(target: string, pass: () => void, fail: () => void) {
     const g = cmdGen
     setTimeout(() => { if (g !== cmdGen || tok !== micToken) return
       cmdH = listenCmd(onCommand, () => cmdLoop()) }, 300) }
-  const failX = () => { stopCmdAll(); fail() }
   if (!srSupported()) {
     $('prompt')!.innerHTML += '<div class="hint" style="color:var(--warn)">⚠ mic not supported in this browser — flashcard fallback (Chrome/Edge recommended)</div>'
     setActions(btn('✅ I know it', 'g-next', pass, 'enter'), btn('❌ I don\'t know it', 'g-again', fail))
@@ -164,18 +198,25 @@ function voiceTest(target: string, pass: () => void, fail: () => void) {
       return `<div class="qrow${ix === 0 ? ' now' : ''}"><span class="qn">${ix + 1}</span><span>${esc(m || n.hanzi)}</span>${t ? `<span class="hint">${t}</span>` : ''}</div>` })
     return rows.length > 1 ? `<div class="qlist"><div class="hint" style="text-align:left">up next</div>${rows.join('')}</div>` : ''
   }
-  $('prompt')!.innerHTML += '<div id="mic-line" class="hint" style="font-size:19px;min-height:28px"></div><div id="mic-bar-wrap"><div id="mic-bar"></div></div><div id="mic-ctl" class="btnrow"></div>' + upNext()
+  $('prompt')!.innerHTML += `<div id="att-list"></div>
+    <div id="q-card"><span class="qz">${esc(qText)}</span><span class="qint">${fmtIvl()}</span></div>
+    ${rv ? `<div id="reveal-card" style="display:none"><span class="rlbl">correct answer</span><span class="rhz">${esc(rv.hz)}</span><span class="rpy">${esc(rv.py)}</span></div>` : ''}
+    <div id="mic-line" class="hint" style="font-size:17px;min-height:26px"></div>
+    <div id="mic-bar-wrap"><div id="mic-bar"></div></div>
+    <div id="cmd-row">
+      <button id="cmd-susp">⏸ Suspend please<span class="zh">請暫停卡片</span></button>
+      <button id="cmd-pass">→ Pass please<span class="zh">請跳過</span></button>
+    </div>
+    <div id="mic-ctl" class="btnrow"></div>` + upNext()
   const line = $('mic-line')!, ctl = $('mic-ctl')!
+  const ms = $('mic-state'); if (ms) ms.classList.remove('ok')
   startMeter()
   const replay = btn('🔊 Replay question', undefined, () => { sayQ() })
   const arm = () => { if (tok !== micToken) return
-    ctl.innerHTML = ''; line.textContent = '🎙 tap Speak now · or say: “pass” · “suspend” · “pause” · “again”'
-    ctl.appendChild(btn('🎙 Speak now', 'primary', listenOnce)); ctl.appendChild(replay)
-    ctl.appendChild(btn('Pass — show answer', 'g-hard', auraclePass)) }
+    ctl.innerHTML = ''; line.textContent = echo ? '🎙 echo it — say the answer out loud' : '🎙 listening… say it in Mandarin' }
   const listenOnce = () => { if (tok !== micToken) return
     stopCmd()
     line.textContent = echo ? '🎙 echo it — say the answer out loud' : '🎙 listening… say it in Mandarin'
-    ctl.innerHTML = ''; ctl.appendChild(btn('⏸ Pause', 'g-again', () => { h?.stop(); pauseSess() }))
     let h: ListenHandle | null = null
     setTimeout(() => { // let the question audio fully finish — mic must not hear the TTS tail
       if (tok !== micToken) return
@@ -184,6 +225,7 @@ function voiceTest(target: string, pass: () => void, fail: () => void) {
       t => { if (tok !== micToken) return
         const sim = similarity(t, target)
         if (sim >= PASS) {
+          atts.push({ t, sim, ok: true }); renderAtt()
           if (echo) { // auracle: they needed the answer first — grade Again, show the reveal
             line.innerHTML = `✅ echoed: “${esc(t)}” <span class="hint">— graded Again so it comes back soon</span>`
             stopCmdAll(); setTimeout(() => { if (tok === micToken) fail() }, 1300) }
@@ -191,32 +233,32 @@ function voiceTest(target: string, pass: () => void, fail: () => void) {
             ctl.innerHTML = ''; stopCmdAll(); setTimeout(() => { if (tok === micToken) pass() }, 1100) } }
         else reAttempt(t, sim) },
       e => { if (tok !== micToken) return
-        line.textContent = '⚠ ' + e; arm(); cmdLoop() })
+        line.textContent = '⚠ ' + e; ctl.innerHTML = ''; ctl.appendChild(replay); cmdLoop() })
     }, 450)
   }
   const reAttempt = (heard?: string, sim = 0) => {
     if (tok !== micToken) return
     tries++
-    if (heard != null) line.innerHTML = `❌ heard: “${esc(heard)}” <span class="hint">(${Math.round(sim * 100)}% match)</span>`
-    ctl.innerHTML = ''
-    if (tries >= 3) { // gave up — show answer, reset like auracle's "pass please"
-      line.innerHTML += `<div class="hint">moving on — it comes back soon</div>`
-      stopCmdAll(); setTimeout(() => { if (tok === micToken) fail() }, 1400); return }
-    const label = echo ? 'one more echo…' : `not quite — asking again (${tries}/2)…`
-    line.innerHTML += `<div class="hint">${label}</div>`
+    if (heard != null) { atts.push({ t: heard, sim }); renderAtt() }
+    const label = echo ? 'not quite — one more echo…' : `not quite — I'll ask again (attempt ${tries})`
+    line.innerHTML = `❌ “${esc(heard || '')}” <span class="hint">(${Math.round(sim * 100)}% match) — ${label}</span>`
     setTimeout(() => { if (tok !== micToken) return
       sayQ(() => { if (tok === micToken) listenOnce() }) }, echo ? 900 : 1500)
   }
-  const auraclePass = () => { // "pass please": AI speaks the answer, then re-asks until you echo it correctly
+  const auraclePass = () => { // "pass please": show + speak the answer, then re-ask until you echo it correctly
     if (tok !== micToken) return
     tries = 0; echo = true
     try { speechSynthesis.cancel() } catch (e) {}
+    const rc = $('reveal-card'); if (rc) rc.style.display = ''
     line.textContent = '🔊 the answer — listen, then say it back'
     ctl.innerHTML = ''
     sayAnswer()
     setTimeout(() => { if (tok !== micToken) return
       sayQ(() => { if (tok === micToken) listenOnce() }) }, 2800)
   }
+  ;($('cmd-susp') as HTMLElement)!.onclick = () => onCommand('suspend')
+  ;($('cmd-pass') as HTMLElement)!.onclick = () => onCommand('pass')
+  vKill = stopCmdAll
   sayQ(() => { if (tok === micToken) listenOnce() }) // auto-listen after the question is spoken
   arm(); cmdLoop()
 }
@@ -559,10 +601,7 @@ function readSettings() {
 }
 function openSettings() { fillSettings(S.settings!); $('settings-modal')!.classList.add('open') }
 function closeSettings() { readSettings(); statsView(); $('settings-modal')!.classList.remove('open') }
-function applyModeLabel() { const b = $('mode-btn')
-  const m = S.settings!.mode || 'voice'
-  if (b) b.textContent = m === 'chat' ? '💬 Conversational' : m === 'voice' ? '🎙 Voice mode' : '🗂 Flashcard mode'
-  if (typeof document !== 'undefined') document.body.classList.toggle('voice-mode', m !== 'silent') }
+function applyModeLabel() { renderTop() }
 
 /* ---------- conversational mode: speech-to-speech practice with an AI ---------- */
 let chatTok = 0
@@ -578,11 +617,14 @@ function chatView() {
   const tok = ++chatTok
   micToken++ // kills study mic loop
   S.view = 'chat'
-  if (!S.notes.length) { alert('Import a deck first so the AI knows your vocabulary.'); return }
+  renderTop()
+  if (!S.notes.length) { alert('Import a deck first so the AI knows your vocabulary.'); showHome(); return }
   if (!S.chatLog.length) S.chatLog.push({ who: 'ai', t: '你好！我们开始聊天吧。(nǐ hǎo! Let\'s chat.)' })
   chatRender()
+  const ms = $('mic-state'); if (ms) { ms.classList.remove('ok'); ms.textContent = 'mic connecting…' }
   micMeter(lvl => { const b = $('mic-bar'); if (b) b.style.width = Math.max(2, Math.min(100, lvl * 130)) + '%' })
-    .then(h => { if (h && tok === chatTok) S.chatMeter = h })
+    .then(h => { if (h && tok === chatTok) { S.chatMeter = h; if (ms) { ms.classList.add('ok'); ms.textContent = '🎙 listening · mic connected' } }
+      else if (!h && ms) ms.textContent = '⚠ mic blocked — allow microphone access' })
   chatListen()
 }
 function chatListen() {
@@ -709,15 +751,24 @@ export function init() {
     e.preventDefault(); S.dragDepth = 0; $('drop-overlay')!.classList.remove('show')
     if (e.dataTransfer?.files?.length) importFiles([...e.dataTransfer.files as unknown as File[]]) })
   ;($('settings-btn') as HTMLElement)!.onclick = openSettings
-  ;($('mode-btn') as HTMLElement)!.onclick = () => {
-    const cycle: Record<string, 'silent' | 'voice' | 'chat'> = { silent: 'voice', voice: 'chat', chat: 'silent' }
-    S.settings!.mode = cycle[S.settings!.mode || 'voice'] || 'voice'
-    saveSettings(); applyModeLabel()
-    micToken++ // kill any live mic session
-    if (S.settings!.mode === 'chat') { chatView(); return }
-    if (S.view === 'chat') { S.view = 'study' }
-    if (S.view === 'study' && S.cur && (S.stage === 2 || S.stage === 4)) {
-      S.stage === 2 ? showWordTest() : showSentTest() } }
+  ;($('mode-btn') as HTMLElement)!.onclick = () => {} // legacy hidden — pills below
+  const setMode = (m: 'silent' | 'voice' | 'chat') => {
+    S.settings!.mode = m
+    saveSettings(); renderTop()
+    micToken++; chatTok++; vKill?.(); vKill = null // kill any live voice/chat session
+    if (m === 'chat') { chatView(); return }
+    if (S.view === 'study') idler() }
+  ;(['silent', 'voice', 'chat'] as const).forEach(k => { const p = $('mp-' + k) as HTMLElement | null; if (p) p.onclick = () => setMode(k) })
+  ;($('v-pause') as HTMLElement)!.onclick = () => { micToken++; chatTok++; vKill?.(); vKill = null; pauseSess() }
+  ;($('v-set') as HTMLElement)!.onclick = openSettings
+  ;($('v-help') as HTMLElement)!.onclick = () =>
+    alert('Voice mode: listen to the question, then just say the answer out loud in Mandarin. ' +
+      'If it doesn\'t match, the question is repeated — say "pass" to hear the answer and echo it back. ' +
+      'Voice commands: "again" (repeat question), "pass" (show answer), "suspend" (skip card), "pause".')
+  ;($('v-exit') as HTMLElement)!.onclick = () => {
+    micToken++; chatTok++; vKill?.(); vKill = null
+    try { speechSynthesis.cancel() } catch (e) {}
+    showHome() }
   applyModeLabel()
   ;($('reset-card-btn') as HTMLElement)!.onclick = () => {
     if (!S.studyDeck) { alert('No deck active.'); return }

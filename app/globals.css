@@ -140,3 +140,52 @@ footer{position:fixed;bottom:0;left:0;right:0;background:rgba(20,26,35,.85);back
   .stage{font-size:11px;padding:4px 10px}
 }
 @media(max-width:640px){.hz{font-size:52px}.py{font-size:36px}.meaning{font-size:21px}}
+
+/* ---------- auracle-style study frame: top bar + bottom bar ---------- */
+body.study header, body.study footer { display:none }
+body.study main { padding:0; max-width:none }
+body.study #study-view { padding-bottom:86px }
+#study-top { display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding:14px 22px; border-bottom:1px solid var(--bd); background:rgba(20,26,35,.75); backdrop-filter:blur(10px); position:sticky; top:0; z-index:5 }
+#cur-lesson-wrap { display:flex; flex-direction:column; gap:1px; min-width:220px; flex:1 1 260px; text-align:left }
+#cur-lesson-wrap .hint { font-size:10.5px; letter-spacing:.14em; text-transform:uppercase }
+#cur-lesson { font-size:19px; font-weight:750; text-transform:uppercase; letter-spacing:.02em }
+#top-prog { flex:1 1 300px; display:flex; align-items:center; gap:10px; min-width:260px }
+#top-fill-track { flex:1; height:10px; border-radius:6px; background:rgba(255,255,255,.06); border:1px solid var(--bd); overflow:hidden; position:relative }
+#top-fill { height:100%; width:0%; background:linear-gradient(90deg,#2dd4bf,#e3b341); border-radius:6px; transition:width .5s ease }
+#top-pct { font-size:12.5px; font-weight:700; border:1px solid var(--bd); border-radius:16px; padding:4px 10px; color:var(--dim); white-space:nowrap }
+#top-chips { display:flex; gap:8px; font-size:11.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase }
+#top-chips span { border:1px solid var(--bd); border-radius:16px; padding:4px 11px; white-space:nowrap }
+#top-chips .c-new { color:#f472b6 } #top-chips .c-lrn { color:#e3b341 } #top-chips .c-lrd { color:#2dd4bf }
+#mode-pills { display:flex; border:2px solid var(--bd); border-radius:12px; overflow:hidden }
+#mode-pills .pill { border:none; border-radius:0; background:transparent; color:var(--dim); font-weight:800; letter-spacing:.06em; text-transform:uppercase; font-size:12.5px; padding:9px 16px }
+#mode-pills .pill.on { background:var(--warn); color:#111 }
+/* bottom bar */
+#vbar { position:fixed; bottom:0; left:0; right:0; display:none; align-items:center; gap:14px; padding:12px 18px; background:rgba(20,26,35,.85); backdrop-filter:blur(10px); border-top:1px solid var(--bd); z-index:6 }
+body.study #vbar { display:flex }
+#mic-state { display:flex; align-items:center; gap:8px; font-size:13px; border:1px solid rgba(251,146,60,.35); background:rgba(251,146,60,.08); color:#fb923c; border-radius:12px; padding:8px 14px; max-width:46%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+#mic-state.ok { border-color:rgba(63,185,80,.35); background:rgba(63,185,80,.08); color:#3fb950 }
+#vbar-btns { margin-left:auto; display:flex; gap:10px }
+#vbar-btns button { min-height:42px; padding:9px 16px }
+/* voice question frame */
+#att-list { display:flex; flex-direction:column; gap:6px; margin:0 0 12px }
+#att-list .att { display:flex; align-items:center; gap:10px; border:1px solid var(--bd); border-radius:12px; padding:10px 14px; color:#9aa7b4; font-size:14.5px; text-align:left; background:rgba(255,255,255,.02) }
+#att-list .att .x { color:var(--bad); font-weight:800 }
+#att-list .att .ok { color:var(--ok); font-weight:800 }
+#att-list .att.now { border-color:var(--fg); color:#e8edf3; background:rgba(255,255,255,.05) }
+#q-card { display:flex; align-items:center; justify-content:space-between; gap:16px; border:1px solid var(--bd); border-radius:16px; background:var(--card); padding:18px 22px; text-align:left; box-shadow:0 10px 30px rgba(0,0,0,.35) }
+#q-card .qz { font-size:23px; font-weight:750 }
+#q-card .qint { color:var(--dim); font-size:15px; font-weight:700; white-space:nowrap }
+#reveal-card { border:1px solid rgba(227,179,65,.5); background:rgba(227,179,65,.08); border-radius:14px; padding:14px 18px; margin-top:12px; display:flex; align-items:center; gap:14px; text-align:left }
+#reveal-card .rlbl { font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--warn); font-weight:800 }
+#reveal-card .rhz { font-size:26px; font-weight:800; color:#ffd97a }
+#reveal-card .rpy { color:var(--dim); font-size:15px }
+#cmd-row { display:flex; gap:12px; justify-content:center; margin-top:12px; flex-wrap:wrap }
+#cmd-row button { min-height:46px; font-weight:800; letter-spacing:.05em; text-transform:uppercase }
+#cmd-row button .zh { display:block; font-size:12px; font-weight:500; text-transform:none; letter-spacing:0; opacity:.75 }
+@media (max-width:760px) {
+  #study-top { padding:10px 12px; gap:8px }
+  #cur-lesson { font-size:15px }
+  #vbar { padding:8px 10px; gap:8px }
+  #mic-state { max-width:38%; font-size:12px; padding:6px 10px }
+  #vbar-btns button { min-height:40px; padding:7px 12px; font-size:14px }
+}

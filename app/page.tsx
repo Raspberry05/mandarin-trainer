@@ -14,7 +14,7 @@ export default function Page() {
         <input type="file" id="file-in" accept=".apkg,.colpkg,.txt,.csv" multiple hidden />
         <button id="settings-btn">⚙ Settings</button>
         <button id="reset-card-btn" title="Erase ALL progress for this deck and start over">♻ Reset deck</button>
-        <button id="mode-btn" title="Flashcard = cards with image & audio · Voice = spoken question, answer with the mic">🎙 Voice mode</button>
+        <button id="mode-btn" style={{display:'none'}}>mode</button>
         <button id="auth-btn">👤 Sign in / Sign up</button>
       </header>
       <main>
@@ -26,6 +26,16 @@ export default function Page() {
           <div id="deck-grid"></div>
         </div>
         <div id="study-view" style={{display:'none'}}>
+          <div id="study-top">
+            <div id="cur-lesson-wrap"><span className="hint">CURRENTLY STUDYING:</span><b id="cur-lesson"></b></div>
+            <div id="top-prog"><div id="top-fill-track"><div id="top-fill"></div></div><span id="top-pct"></span></div>
+            <div id="top-chips"></div>
+            <div id="mode-pills">
+              <button id="mp-silent" className="pill">🗂 Flashcard</button>
+              <button id="mp-voice" className="pill">🎙 Voice</button>
+              <button id="mp-chat" className="pill">💬 Conversational</button>
+            </div>
+          </div>
           <div className="stats">
             <span>New today: <b id="st-new">0</b></span>
             <span>Reviews today: <b id="st-rev">0</b></span>
@@ -46,6 +56,15 @@ export default function Page() {
                 <div id="feedback"></div>
                 <div id="timer"></div>
               </div>
+            </div>
+          </div>
+          <div id="vbar">
+            <div id="mic-state" className="hint">mic —</div>
+            <div id="vbar-btns">
+              <button id="v-pause">⏸ Pause</button>
+              <button id="v-set">⚙</button>
+              <button id="v-help" title="how voice mode works">?</button>
+              <button id="v-exit">✕ Exit</button>
             </div>
           </div>
         </div>
