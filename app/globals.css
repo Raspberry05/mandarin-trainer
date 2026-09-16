@@ -213,7 +213,7 @@ footer{position:fixed;bottom:0;left:0;right:0;background:rgba(23,28,44,.9);backd
 .lvlart svg{display:block;width:100%;height:104px}
 /* deck cards use the same cover language */
 .deckcover{margin:-26px -26px 14px}
-.deckcover svg{display:block;width:100%;height:104px}
+.deckcover svg{display:block;width:100%;height:118px}
 .lvlart text,.deckcover text{transform-box:fill-box;transform-origin:center}
 .lvlcard:hover .lvlart .lem1,.deckcard:hover .deckcover .lem1{animation:hoverem .7s ease-in-out infinite}
 .lvlcard:hover .lvlart .lem2,.deckcard:hover .deckcover .lem2{animation:hovertw .8s ease-in-out infinite .12s}
