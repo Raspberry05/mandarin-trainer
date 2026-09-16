@@ -4,12 +4,25 @@ import { useEffect } from 'react'
 export default function Page() {
   useEffect(() => {
     import('@/lib/ui').then(m => m.init())
+    /* home dashboard cursor ambience: soft glow follows the pointer, orbs parallax behind it */
+    const glow = document.getElementById('cursor-glow')
+    const home = document.getElementById('home-view')
+    const onMove = (e: MouseEvent) => {
+      if (glow) glow.style.transform = `translate3d(${e.clientX}px,${e.clientY}px,0) translate(-50%,-50%)`
+      if (home) {
+        home.style.setProperty('--mx', (e.clientX / window.innerWidth - 0.5).toFixed(3))
+        home.style.setProperty('--my', (e.clientY / window.innerHeight - 0.5).toFixed(3))
+      }
+    }
+    window.addEventListener('mousemove', onMove)
+    return () => window.removeEventListener('mousemove', onMove)
   }, [])
   return (
     <>
       <div id="boot"><div className="spin"></div><div className="hint">loading libraries (sql.js, jszip, zstd)…</div></div>
+      <div id="cursor-glow" aria-hidden="true"></div>
       <header>
-        <h1><span className="logo-ic"><svg width="25" height="25" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="13" rx="5.5" stroke="#00c2ff" strokeWidth="2.3"/><rect className="eq" x="8.4" y="9.4" width="2.1" height="4.2" rx="1" fill="#00e676"/><rect className="eq" x="11.6" y="7.8" width="2.1" height="7.4" rx="1" fill="#b249ff"/><rect className="eq" x="14.8" y="9.4" width="2.1" height="4.2" rx="1" fill="#ff4b8b"/></svg></span>Language Trainer</h1>
+        <h1><span className="logo-ic"><svg width="25" height="25" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="13" rx="5.5" stroke="#00c2ff" strokeWidth="2.3"/><rect className="eq" x="8.4" y="9.4" width="2.1" height="4.2" rx="1" fill="#00e676"/><rect className="eq" x="11.6" y="7.8" width="2.1" height="7.4" rx="1" fill="#b249ff"/><rect className="eq" x="14.8" y="9.4" width="2.1" height="4.2" rx="1" fill="#ff4b8b"/></svg></span>Aya!</h1>
         <button id="back-btn" style={{display:'none'}}>‹ Home</button>
         <input type="file" id="file-in" accept=".apkg,.colpkg,.txt,.csv" multiple hidden />
         <button id="settings-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v3M12 18.2v3M2.8 12h3M18.2 12h3M5.5 5.5l2.1 2.1M16.4 16.4l2.1 2.1M18.5 5.5l-2.1 2.1M7.6 16.4l-2.1 2.1"/></svg>Settings</button>
@@ -19,6 +32,9 @@ export default function Page() {
       </header>
       <main>
         <div id="home-view">
+          <div className="orb orb1" aria-hidden="true"></div>
+          <div className="orb orb2" aria-hidden="true"></div>
+          <div className="orb orb3" aria-hidden="true"></div>
           <div id="diag" style={{fontSize:'11.5px',color:'var(--dim)',margin:'0 0 8px',fontFamily:'monospace'}}>booting…</div>
           <div className="hero">
             <h2><span className="hero-ic"><svg width="30" height="30" viewBox="0 0 24 24" fill="none"><circle className="ring" cx="12" cy="12" r="9" stroke="#00c2ff" strokeWidth="2.4"/><circle className="ring" cx="12" cy="12" r="4.5" stroke="#b249ff" strokeWidth="2.4" style={{animationDirection:'reverse'}}/><circle className="dot" cx="12" cy="12" r="1.8" fill="#ff4b8b"/></svg></span>Speak your way to fluency</h2>

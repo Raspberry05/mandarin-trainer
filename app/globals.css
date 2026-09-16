@@ -186,6 +186,21 @@ footer{position:fixed;bottom:0;left:0;right:0;background:rgba(23,28,44,.9);backd
 .word-chips .sw:hover{border-color:var(--acc);transform:translateY(-2px)}
 
 /* ---------- home: hero + deck cards ---------- */
+/* cursor ambience: soft glow trails the pointer; blurred orbs parallax with it */
+#cursor-glow{position:fixed;left:0;top:0;width:540px;height:540px;border-radius:50%;pointer-events:none;z-index:1;
+  background:radial-gradient(circle,rgba(178,73,255,.14),rgba(0,194,255,.07) 42%,transparent 70%);
+  filter:blur(18px);mix-blend-mode:screen;opacity:0;transition:opacity .5s,transform .22s ease-out}
+body:not(.study) #cursor-glow{opacity:1}
+@media(pointer:coarse){#cursor-glow{display:none}} /* no mouse — skip on touch */
+.orb{position:absolute;border-radius:50%;pointer-events:none;z-index:0;filter:blur(42px);
+  transition:transform .7s cubic-bezier(.2,.8,.2,1)}
+.orb1{width:240px;height:240px;left:-60px;top:6%;background:rgba(0,194,255,.13);
+  transform:translate(calc(var(--mx,0)*26px),calc(var(--my,0)*20px))}
+.orb2{width:300px;height:300px;right:-70px;top:30%;background:rgba(178,73,255,.13);
+  transform:translate(calc(var(--mx,0)*-34px),calc(var(--my,0)*-22px))}
+.orb3{width:200px;height:200px;left:22%;bottom:-50px;background:rgba(255,75,139,.10);
+  transform:translate(calc(var(--mx,0)*18px),calc(var(--my,0)*-14px))}
+#home-view{position:relative;overflow:hidden}
 .hero{text-align:center;margin:18px 0 22px}
 .hero h2{font-size:34px;margin:0 0 6px;font-weight:900;letter-spacing:-.01em}
 .hero h2{display:inline-flex;align-items:center;gap:10px}

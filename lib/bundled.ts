@@ -11,7 +11,7 @@ function onStateChange() {
   clearTimeout(S.sbTimer); S.sbTimer = setTimeout(() => { sbPush().catch(() => {}) }, 2500)
 }
 
-/* bundled data are part of Language Trainer itself — always loaded, cannot be hidden */
+/* bundled data are part of Aya itself — always loaded, cannot be hidden */
 export async function loadBundled(): Promise<number> {
   try {
     let j: any = null, err: any = null

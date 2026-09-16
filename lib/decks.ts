@@ -5,7 +5,7 @@ import { renderHome, showHome } from './ui'
 
 export async function removeDeck(dRaw: string, dname: string) {
   const d = String(dRaw)
-  if (d === 'mz') { alert('The Mandarin curriculum is built into Language Trainer and cannot be removed.'); return }
+  if (d === 'mz') { alert('The Mandarin curriculum is built into Aya and cannot be removed.'); return }
   const ns = S.notes.filter(n => String(n.deckId) === d)
   if (!confirm(`Remove deck "${dname}" — all ${ns.length} cards and their progress?`)) return
   if (!ns.length) { alert('No cards found for this deck.'); return }
