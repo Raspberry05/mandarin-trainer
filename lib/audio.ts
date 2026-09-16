@@ -29,9 +29,10 @@ function ttsLocal(text: string, lang: string, rate: number, onend?: () => void) 
   }, 80)
 }
 const gCache = new Map<string, string>()
-/* keys: settings first, then build-time env (Vercel: NEXT_PUBLIC_ELEVENLABS_API_KEY / NEXT_PUBLIC_OPENAI_API_KEY) */
-const EL_KEY = () => S.settings?.elevenKey || (typeof process !== 'undefined' && (process as any).env?.NEXT_PUBLIC_ELEVENLABS_API_KEY) || ''
-const OAI_KEY = () => S.settings?.openaiKey || (typeof process !== 'undefined' && (process as any).env?.NEXT_PUBLIC_OPENAI_API_KEY) || ''
+/* keys: user's own key in settings = direct browser call; otherwise /api/tts proxy with server env
+   (ELEVENLABS_API_KEY / OPENAI_API_KEY — server-only, never shipped to the client) */
+const EL_KEY = () => S.settings?.elevenKey || ''
+const OAI_KEY = () => S.settings?.openaiKey || ''
 /* premium AI voices: persistent cache (IndexedDB) + in-flight dedupe — each unique phrase is synthesized exactly once, ever */
 const eCache = new Map<string, string>()
 const oCache = new Map<string, string>()
@@ -54,20 +55,26 @@ function fetchTtsCached(cache: Map<string, string>, k: string, url: string, init
   return run
 }
 async function elevenUrl(text: string, lang: string): Promise<string | null> {
-  const key = EL_KEY(); if (!key) return null
   const voice = (S.settings?.elevenVoice || 'JBFqnCBsd6RMkjVDRZzb').trim()
   const model = lang.startsWith('zh') ? 'eleven_multilingual_v2' : 'eleven_flash_v2_5'
-  return fetchTtsCached(eCache, 'e|' + voice + '|' + model + '|' + text,
-    `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voice)}?output_format=mp3_44100_128`,
-    { method: 'POST', headers: { 'xi-api-key': key, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, model_id: model }) })
+  const key = EL_KEY()
+  const init: RequestInit = key
+    ? { method: 'POST', headers: { 'xi-api-key': key, 'Content-Type': 'application/json' }, body: JSON.stringify({ text, model_id: model }) }
+    : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, lang, engine: 'eleven', voice }) }
+  const url = key
+    ? `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voice)}?output_format=mp3_44100_128`
+    : '/api/tts'
+  return fetchTtsCached(eCache, 'e|' + voice + '|' + model + '|' + text, url, init)
 }
 async function openaiUrl(text: string, lang: string): Promise<string | null> {
-  const key = OAI_KEY(); if (!key) return null
-  return fetchTtsCached(oCache, 'o|coral|' + lang + '|' + text, 'https://api.openai.com/v1/audio/speech',
-    { method: 'POST', headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'gpt-4o-mini-tts', voice: 'coral', input: text, response_format: 'mp3',
-        instructions: lang.startsWith('zh') ? 'Speak warm, clear native Mandarin, moderate pace.' : 'Speak warmly, like a friendly tutor.' }) })
+  const key = OAI_KEY()
+  const init: RequestInit = key
+    ? { method: 'POST', headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'gpt-4o-mini-tts', voice: 'coral', input: text, response_format: 'mp3',
+          instructions: lang.startsWith('zh') ? 'Speak warm, clear native Mandarin, moderate pace.' : 'Speak warmly, like a friendly tutor.' }) }
+    : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, lang, engine: 'openai', voice: 'coral' }) }
+  const url = key ? 'https://api.openai.com/v1/audio/speech' : '/api/tts'
+  return fetchTtsCached(oCache, 'o|coral|' + lang + '|' + text, url, init)
 }
 function gUrl(text: string, lang: string) {
   const k = lang + '|' + text
