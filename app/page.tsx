@@ -97,7 +97,7 @@ export default function Page() {
           <div className="row"><label>Text-to-speech engine</label><select id="s-ttspref"><option value="auto">Auto (best available)</option><option value="local">Device voice</option><option value="google">Google TTS (AI voice)</option><option value="eleven">ElevenLabs (premium AI voice)</option><option value="openai">OpenAI (gpt-4o-mini-tts)</option></select></div>
           <div className="row"><label>ElevenLabs API key (for ElevenLabs / all auto Mandarin)</label><input type="text" id="s-elevenKey" placeholder="xi-api-key"></input></div>
           <div className="row"><label>OpenAI API key (gpt-4o-mini-tts fallback engine)</label><input type="text" id="s-openaiKey" placeholder="sk-…"></input></div>
-          <div className="row"><label>ElevenLabs voice ID — Mandarin answers (optional; default Alice Xb7hH8MSUJpSbSDYk0k2)</label><input type="text" id="s-elevenVoice" placeholder="Xb7hH8MSUJpSbSDYk0k2"></input></div>
+          <div className="row"><label>ElevenLabs voice ID — Mandarin answers (optional; default Alice Xb7hH8MSUJpSbSDYk0k2 · Jason Chen DowyQ68vDpgFYdWVGjc3 = native Beijing voice, requires a paid ElevenLabs plan — free tier returns 402)</label><input type="text" id="s-elevenVoice" placeholder="Xb7hH8MSUJpSbSDYk0k2"></input></div>
           <div className="row"><label>ElevenLabs voice ID — English questions (optional; default George)</label><input type="text" id="s-elevenVoiceEn" placeholder="JBFqnCBsd6RMkjVDRZzb"></input></div>
           <div className="row"><label>Preset</label><select id="s-preset"></select></div>
           <div className="row"><label>Preset name (save current)</label><input type="text" id="s-pname" placeholder="Default" /></div>
