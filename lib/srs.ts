@@ -1,6 +1,5 @@
 "use strict"
 import { S, rollCounts, isDue, pOf, persist, parseSteps, mult, liveNotes, activeNote, sentReady, normHz, hskLevel, levelComplete, type Note, type Prog, type QItem } from './state'
-import { statsView } from './ui'
 
 /* ---------- queue / schedule ---------- */
 export function buildQueue(): QItem[] {
@@ -57,7 +56,7 @@ export function grade(action: number, q: QItem[] = S.queue) {
       else { p.step++; p.due = Date.now() + R[p.step]! * 1000 } }
     else { p.state = 'review'; p.ivl = Math.max(2, Math.round(p.ivl * 0.7)); p.due = Date.now() + p.ivl * 864e5 }
   }
-  persist(); statsView()
+  persist() // UI refresh is the caller's job — scheduler stays pure
 }
 
 export function gradeSent(a: number) {
@@ -77,7 +76,7 @@ export function gradeSent(a: number) {
     else if (a === 2) { p.ivl = Math.max(1, Math.round(p.ivl * (p.ease || 2.5))) }
     else { p.ease = Math.min(3.0, (p.ease || 2.5) + 0.1); p.ivl = Math.round(p.ivl * (p.ease || 2.5) * 1.3) }
     p.ivl = Math.min(p.ivl, S.settings!.maxivl); p.due = Date.now() + p.ivl * 864e5 }
-  persist(); statsView()
+  persist() // UI refresh is the caller's job — scheduler stays pure
 }
 
 

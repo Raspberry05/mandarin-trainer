@@ -164,6 +164,9 @@ body.study #study-view { padding-bottom:86px }
 body.study #vbar { display:flex }
 #mic-state { display:flex; align-items:center; gap:8px; font-size:13px; border:1px solid rgba(251,146,60,.35); background:rgba(251,146,60,.08); color:#fb923c; border-radius:12px; padding:8px 14px; max-width:46%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
 #mic-state.ok { border-color:rgba(63,185,80,.35); background:rgba(63,185,80,.08); color:#3fb950 }
+/* flashcard mode: hide mic widgets (bar, prompt meter, listening state) */
+body.mode-silent #mic-state, body.mode-silent #mic-bar-wrap { display:none !important }
+body.mode-silent #mic-bar-wrap { opacity:0 }
 #vbar-btns { margin-left:auto; display:flex; gap:10px }
 #vbar-btns button { min-height:42px; padding:9px 16px }
 /* voice question frame */
