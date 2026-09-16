@@ -28,6 +28,32 @@ export function statsView() {
   renderRail()
 }
 
+/* ---------- HSK level cover art + descriptions (inline SVG scenes, no assets) ---------- */
+const LVL_SCENES: Record<number, { e1: string; e2: string; g: [string, string]; title: string; desc: string }> = {
+  1: { e1: '🐼', e2: '🎋', g: ['#2dd4bf', '#0d9488'], title: 'First Steps', desc: 'Greetings, numbers, family, food and simple asks — the ~150 words that start everyday Mandarin.' },
+  2: { e1: '🏮', e2: '🧧', g: ['#f97316', '#dc2626'], title: 'Simple Chats', desc: 'Shopping, time, directions and weather — hold basic conversations with ~300 words.' },
+  3: { e1: '🐉', e2: '☁️', g: ['#a560ff', '#6d28d9'], title: 'Daily Life Flow', desc: 'Opinions, plans, stories and small talk — get around daily life with ~600 words.' },
+  4: { e1: '🌸', e2: '🏯', g: ['#f472b6', '#e11d48'], title: 'Ideas & Culture', desc: 'Work, culture and abstract topics — discuss ideas, not just things, with ~1,200 words.' },
+  5: { e1: '📺', e2: '🎙️', g: ['#1cb0f6', '#2563eb'], title: 'Fluent Discussion', desc: 'News, films, debates and interviews — follow real media with ~2,500 words.' },
+  6: { e1: '🖌️', e2: '🏞️', g: ['#ffc800', '#d97706'], title: 'Mastery & Nuance', desc: 'Literature, idioms and fine shades of meaning — the ~5,000-word summit.' },
+}
+const ALL_SCENE = { e1: '📚', e2: '🧭', g: ['#1cb0f6', '#a560ff'] as [string, string] }
+function lvlArt(L: number | string, all = false): string {
+  const s = all ? ALL_SCENE : LVL_SCENES[+L]
+  if (!s) return ''
+  const key = all ? 'all' : L
+  return `<svg viewBox="0 0 200 84" preserveAspectRatio="xMidYMid slice" role="img" aria-label="HSK ${all ? 'all levels' : L} illustration">
+    <defs><linearGradient id="lg${key}" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="${s.g[0]}"/><stop offset="1" stop-color="${s.g[1]}"/></linearGradient></defs>
+    <rect width="200" height="84" fill="url(#lg${key})"/>
+    <circle cx="174" cy="12" r="32" fill="rgba(255,255,255,.14)"/>
+    <circle cx="14" cy="80" r="26" fill="rgba(0,0,0,.16)"/>
+    <text x="22" y="56" font-size="34">${s.e1}</text>
+    <text x="142" y="32" font-size="19">${s.e2}</text>
+    <text x="12" y="78" font-size="11" font-weight="900" fill="rgba(255,255,255,.92)" font-family="Nunito,sans-serif">${all ? 'ALL LEVELS' : 'HSK ' + L}</text>
+  </svg>`
+}
+
 /* ---------- curriculum rail ---------- */
 export function renderRail() {
   const all = lessons(); const cur = activeNote()
@@ -37,7 +63,11 @@ export function renderRail() {
   if (fill) fill.style.width = (all.length ? Math.round(done / all.length * 100) : 0) + '%'
   if (lbl) lbl.textContent = all.length ? done + ' / ' + all.length + ' (' + Math.round(done / all.length * 100) + '%)' : ''
   if (!c) return
-  c.innerHTML = `<h3>curriculum — lesson ${Math.min(curIdx + 1, all.length)} of ${all.length}</h3>`
+  const curL = cur ? hskLevel(cur) : 1
+  const sc = LVL_SCENES[curL]
+  c.innerHTML = `<div class="railart">${lvlArt(curL)}<div class="railart-cap"><b>HSK ${curL}</b> — ${sc ? esc(sc.title) : ''}</div></div>
+    <div class="raildesc">${sc ? esc(sc.desc) : ''}</div>
+    <h3>curriculum — lesson ${Math.min(curIdx + 1, all.length)} of ${all.length}</h3>`
   const byLvl: Record<string, { n: Note; i: number }[]> = {}
   all.forEach((n, i) => { const L = hskLevel(n); (byLvl[L] = byLvl[L] || []).push({ n, i }) })
   let railInit = S.RAIL_INIT
@@ -115,15 +145,18 @@ export function showDeckPage(d: string, fromHash = false) {
     const learnC = lg.length - newC - revC
     const sentC = lg.filter(n => S.progress['S' + n.id]).length
     const el = document.createElement('div'); el.className = 'deckcard lvlcard'
-    el.innerHTML = `<h3>HSK ${L}</h3>
+    const sc = LVL_SCENES[L]
+    el.innerHTML = `<div class="lvlart">${lvlArt(L)}</div><h3>HSK ${L}${sc ? ' — ' + esc(sc.title) : ''}</h3>
       <div class="dmeta">${lg.length} lessons · <b>${newC}</b> new · ${learnC} learning · <b>${revC}</b> learned<br>
-      ${sentC ? `${sentC} sentence(s) unlocked` : 'nothing unlocked yet'}</div>`
+      ${sentC ? `${sentC} sentence(s) unlocked` : 'nothing unlocked yet'}</div>${sc ? `<div class="ddesc">${esc(sc.desc)}</div>` : ''}`
     el.onclick = () => enterLevel(d, L)
     g.appendChild(el)
   }
   if (lvls.length > 1) {
     const all = document.createElement('div'); all.className = 'deckcard lvlcard'
-    all.innerHTML = `<h3>All levels</h3><div class="dmeta">${ns.length} cards across every HSK level</div>`
+    all.innerHTML = `<div class="lvlart">${lvlArt(0, true)}</div><h3>All levels</h3>
+      <div class="dmeta">${ns.length} cards across every HSK level</div>
+      <div class="ddesc">Every lesson in order, from HSK 1 upward — the full climb in one path.</div>`
     all.onclick = () => enterLevel(d, null)
     g.appendChild(all)
   }
