@@ -1,5 +1,15 @@
 import { NextRequest } from 'next/server'
 
+/* list workspace voices so the client can pick valid EN/ZH voice ids */
+export async function GET() {
+  const key = process.env.ELEVENLABS_API_KEY
+  if (!key) return new Response('ELEVENLABS_API_KEY not configured', { status: 501 })
+  const r = await fetch('https://api.elevenlabs.io/v1/voices', { headers: { 'xi-api-key': key } })
+  if (!r.ok) return new Response('upstream ' + r.status, { status: 502 })
+  const j = await r.json()
+  return Response.json({ voices: (j.voices || []).map((v: any) => ({ id: v.voice_id, name: v.name, labels: v.labels })) })
+}
+
 /* server-side TTS proxy: keys stay in server env (ELEVENLABS_API_KEY / OPENAI_API_KEY) */
 export async function POST(req: NextRequest) {
   let b: any
