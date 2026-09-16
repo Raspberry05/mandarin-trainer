@@ -42,6 +42,30 @@ export function listenZh(
   return { stop: () => { try { r.stop() } catch (err) {} } }
 }
 
+/* ---------- English voice commands (armed while the mic is idle) ---------- */
+export type Cmd = 'pass' | 'suspend' | 'pause' | 'again'
+export function parseCommand(t: string): Cmd | null {
+  const s = (t || '').toLowerCase().replace(/[.!,?]/g, ' ')
+  if (/\b(pass|next please|skip|skip it|show me|show answer|i don't know)\b/.test(s)) return 'pass'
+  if (/\b(suspend|park|bury|park it|bury it|suspend it)\b/.test(s)) return 'suspend'
+  if (/\b(pause|pause it|stop|stop it|hold on|wait)\b/.test(s)) return 'pause'
+  if (/\b(again|repeat|repeat it|repeat please|once more|replay)\b/.test(s)) return 'again'
+  return null
+}
+export function listenCmd(onFinal: (c: Cmd) => void, onErr: () => void): ListenHandle | null {
+  const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+  if (!SR) return null
+  const r = new SR()
+  r.lang = 'en-US'; r.interimResults = false; r.maxAlternatives = 1; r.continuous = false
+  let got = false
+  r.onresult = (e: any) => { for (let i = e.resultIndex; i < e.results.length; i++) {
+    if (e.results[i].isFinal) { got = true; const c = parseCommand(e.results[i][0].transcript); if (c) { r.stop(); onFinal(c) } } } }
+  r.onerror = () => { if (!got) onErr() }
+  r.onend = () => { if (!got) onErr() }
+  try { r.start() } catch (e) { return null }
+  return { stop: () => { try { r.stop() } catch (err) {} } }
+}
+
 /* ---------- accuracy: compare Mandarin attempt vs target ---------- */
 export function similarity(said: string, target: string) {
   const a = normHz(said), b = normHz(target)

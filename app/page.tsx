@@ -74,7 +74,9 @@ export default function Page() {
           <div className="row"><label>Desired retention (% — scales interval growth)</label><input type="number" id="s-ret" min={80} max={99} /></div>
           <div className="row"><label>Maximum interval (days)</label><input type="number" id="s-maxivl" min={1} max={36500} /></div>
           <div className="row"><label>Study mode (Silent = flashcards · Voice = mic answers)</label><select id="s-mode"><option value="silent">Silent</option><option value="voice">Voice</option></select></div>
-          <div className="row"><label>Text-to-speech engine</label><select id="s-ttspref"><option value="auto">Auto (best available)</option><option value="local">Device voice</option><option value="google">Google TTS (AI voice)</option></select></div>
+          <div className="row"><label>Text-to-speech engine</label><select id="s-ttspref"><option value="auto">Auto (best available)</option><option value="local">Device voice</option><option value="google">Google TTS (AI voice)</option><option value="eleven">ElevenLabs (premium AI voice)</option></select></div>
+          <div className="row"><label>ElevenLabs API key (for ElevenLabs / all auto Mandarin)</label><input type="text" id="s-elevenKey" placeholder="xi-api-key"></input></div>
+          <div className="row"><label>ElevenLabs voice ID (optional)</label><input type="text" id="s-elevenVoice" placeholder="JBFqnCBsd6RMkjVDRZzb"></input></div>
           <div className="row"><label>Preset</label><select id="s-preset"></select></div>
           <div className="row"><label>Preset name (save current)</label><input type="text" id="s-pname" placeholder="Default" /></div>
           <div className="btnrow" style={{marginTop:'14px'}}>

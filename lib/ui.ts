@@ -1,7 +1,7 @@
 "use strict"
-import { S, $, esc, diag, rollCounts, pOf, persist, isDue, hskLevel, lessons, liveNotes, activeNote, sentReady, sentComplete, sentWords, sHzHas, load, save, LS, type Note, type Prog, type QItem, type Settings } from './state'
+import { S, $, esc, today, diag, rollCounts, pOf, persist, isDue, hskLevel, lessons, liveNotes, activeNote, sentReady, sentComplete, sentWords, sHzHas, load, save, LS, type Note, type Prog, type QItem, type Settings } from './state'
 import { imgSrc, fallbackArt, playAudio, playSent, soundUrl, pickVoice, speak } from './audio'
-import { srSupported, listenZh, similarity, PASS, type ListenHandle } from './speech'
+import { srSupported, listenZh, listenCmd, parseCommand, similarity, PASS, type ListenHandle, type Cmd } from './speech'
 import { buildQueue, grade, gradeSent } from './srs'
 import { saveAll, loadStored } from './idb'
 import { loadBundled } from './bundled'
@@ -113,6 +113,21 @@ function voiceTest(target: string, pass: () => void, fail: () => void) {
   const tok = ++micToken
   const meaning = target
   const sayQ = (cb?: () => void) => speak(`Do you know how to say ${meaning} in Mandarin?`, 'en', cb)
+  /* auracle-style voice commands: pass / suspend / pause / again */
+  let cmdH: ListenHandle | null = null
+  const stopCmd = () => { cmdH?.stop(); cmdH = null }
+  const stopCmdAll = () => { stopCmd(); micToken = tok + 1 } // hard exit: voiceTest becomes a no-op
+  function onCommand(c: Cmd) {
+    if (tok !== micToken) return
+    if (c === 'again') { stopCmd(); line.textContent = '🔁 repeating the question…'; sayQ(() => { arm(); cmdLoop() }); return }
+    if (c === 'pass') { stopCmdAll(); line.textContent = '➡️ passed — showing the answer'; fail(); return }
+    if (c === 'suspend') { stopCmdAll(); suspendCur(); return }
+    if (c === 'pause') { stopCmdAll(); pauseSess(); return } }
+  const cmdLoop = () => { if (tok !== micToken || !srSupported()) return
+    setTimeout(() => { if (tok !== micToken) return
+      cmdH = listenCmd(onCommand, () => cmdLoop()) }, 300) }
+  const passX = () => { stopCmdAll(); pass() }
+  const failX = () => { stopCmdAll(); fail() }
   if (!srSupported()) {
     $('prompt')!.innerHTML += '<div class="hint" style="color:var(--warn)">⚠ mic not supported in this browser — flashcard fallback (Chrome/Edge recommended)</div>'
     setActions(btn('✅ I know it', 'g-next', pass, 'enter'), btn('❌ I don\'t know it', 'g-again', fail))
@@ -121,14 +136,15 @@ function voiceTest(target: string, pass: () => void, fail: () => void) {
   $('prompt')!.innerHTML += '<div id="mic-line" class="hint" style="font-size:19px;min-height:28px"></div><div id="mic-ctl" class="btnrow"></div>'
   const line = $('mic-line')!, ctl = $('mic-ctl')!
   const replay = btn('🔊 Replay question', undefined, () => { sayQ() })
-  const skip = btn('Skip — show answer', 'g-hard', fail)
+  const skip = btn('Skip — show answer', 'g-hard', failX)
   const arm = () => { if (tok !== micToken) return
-    ctl.innerHTML = ''; line.textContent = '🎙 tap Speak now, then say the Mandarin'
+    ctl.innerHTML = ''; line.textContent = '🎙 tap Speak now · or say: “pass” · “suspend” · “pause” · “again”'
     ctl.appendChild(btn('🎙 Speak now', 'primary', run)); ctl.appendChild(replay); ctl.appendChild(skip) }
   const run = () => { if (tok !== micToken) return
+    stopCmd()
     try { speechSynthesis.cancel() } catch (e) {}
     line.textContent = '🎙 listening… speak now'; ctl.innerHTML = ''
-    ctl.appendChild(btn('■ Stop', 'g-again', () => { h?.stop(); arm() }))
+    ctl.appendChild(btn('■ Stop', 'g-again', () => { h?.stop(); arm(); cmdLoop() }))
     let h: ListenHandle | null = null
     h = listenZh(
       t => { if (tok === micToken) line.textContent = '🎙 ' + t },
@@ -136,15 +152,16 @@ function voiceTest(target: string, pass: () => void, fail: () => void) {
         const sim = similarity(t, target)
         if (sim >= PASS) { line.innerHTML = `✅ heard: “${esc(t)}” <span class="hint">(${Math.round(sim * 100)}% match)</span>`
           ctl.innerHTML = ''
+          stopCmdAll()
           setTimeout(() => { if (tok === micToken) pass() }, 1100) }
         else { line.innerHTML = `❌ heard: “${esc(t)}” <span class="hint">(${Math.round(sim * 100)}% match — doesn't match the target)</span>`
           ctl.innerHTML = ''
-          ctl.appendChild(btn('🎙 Try again', 'primary', run)); ctl.appendChild(replay); ctl.appendChild(skip) } },
+          ctl.appendChild(btn('🎙 Try again', 'primary', run)); ctl.appendChild(replay); ctl.appendChild(skip); cmdLoop() } },
       e => { if (tok !== micToken) return
-        line.textContent = '⚠ ' + e; arm() })
+        line.textContent = '⚠ ' + e; arm(); cmdLoop() })
   }
   sayQ(() => { if (tok === micToken) run() }) // auto-listen after the question is spoken
-  arm()
+  arm(); cmdLoop()
 }
 
 /* ---------- placement quiz ---------- */
@@ -362,6 +379,18 @@ function removeCard() { if (!S.cur) return
   delete S.progress[S.cur!.id]; delete S.progress['S' + S.cur!.id]
   persist(); const iid = S.queue.indexOf(S.cur!); if (iid >= 0) S.queue.splice(iid, 1)
   if (!S.queue.length) { idler(); return } route() }
+/* auracle-style: suspend parks the card (relearn-style push-out), pause stops the hands-free loop */
+function suspendCur() { if (!S.cur) return micToken++
+  const p = S.progress[S.cur.id]; if (!p) return advance()
+  p.skipped = true; p.sentDone = true; p.state = 'review'; p.ivl = Math.max(2, p.ivl || 2)
+  p.due = Date.now() + 7 * 864e5
+  persist(); S.diagLog.push('suspend ' + S.cur.id + ' ' + today())
+  S.queue.shift(); S.stage = 0
+  if (!S.queue.length) { idler(); return } route() }
+function pauseSess() { micToken++
+  try { speechSynthesis.cancel() } catch (e) {}
+  setPrompt('<div class="hz" style="font-size:34px">⏸ paused</div><div class="hint">session paused — the deck keeps its place.</div>')
+  setActions(btn('▶️ Resume', 'primary', route, 'enter')) }
 function testReveal(known: boolean) {
   S.stage = 3
   setPrompt(fullView(S.cur!) + audioWarn() +
@@ -456,7 +485,7 @@ function advance() {
 }
 
 /* ---------- settings UI ---------- */
-const SKEYS = ['newday', 'maxrev', 'steps', 'relearn', 'leech', 'leechact', 'noautoplay', 'waitaudio', 'maxsec', 'newsrt', 'revsrt', 'newafter', 'ret', 'maxivl', 'mode', 'ttspref']
+const SKEYS = ['newday', 'maxrev', 'steps', 'relearn', 'leech', 'leechact', 'noautoplay', 'waitaudio', 'maxsec', 'newsrt', 'revsrt', 'newafter', 'ret', 'maxivl', 'mode', 'ttspref', 'elevenKey', 'elevenVoice']
 export function saveSettings() { save(LS.s, S.settings); sbPushIfUser() }
 function sbPushIfUser() { import('./bundled').then(m => m.sbPush().catch(() => {})) }
 function fillSettings(src: Partial<Settings>) {

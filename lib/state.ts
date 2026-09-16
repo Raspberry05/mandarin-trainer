@@ -13,7 +13,8 @@ export interface Settings {
   newday: number; maxrev: number; steps: string; relearn: string; leech: number; leechact: string
   noautoplay: boolean; waitaudio: boolean; maxsec: number; newsrt: string; revsrt: string
   newafter: boolean; ret: number; maxivl: number
-  mode?: 'silent' | 'voice'; ttspref?: 'auto' | 'local' | 'google'
+  mode?: 'silent' | 'voice'; ttspref?: 'auto' | 'local' | 'google' | 'eleven'
+  elevenKey?: string; elevenVoice?: string
 }
 export type QItem = Note | { sentNote: Note }
 
@@ -55,11 +56,12 @@ export const S = {
   sentSeen: new Set<string>(),
   pqItems: [] as Note[],
   pqIdx: 0,
-  BUILD_DATE: 1789537635,
+  BUILD_DATE: 1789538332,
 }
 if (!S.settings) { S.settings = { ...DEF }; S.presets = { 'Default': { ...DEF } as Settings }; save(LS.pr, S.presets); save(LS.s, S.settings) }
 if (!S.settings!.mode) S.settings!.mode = 'silent'
 if (!S.settings!.ttspref) S.settings!.ttspref = 'auto'
+if (!S.settings!.elevenVoice) S.settings!.elevenVoice = 'JBFqnCBsd6RMkjVDRZzb'
 if (typeof S.counts.n === 'number' || typeof S.counts.r === 'number') S.counts = { d: S.counts.d, n: {}, r: {} }
 
 export const $ = (id: string) => document.getElementById(id)!

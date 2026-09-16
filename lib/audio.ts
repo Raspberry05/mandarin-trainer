@@ -24,6 +24,25 @@ function ttsLocal(text: string, lang: string, rate: number, onend?: () => void) 
   if (onend) setTimeout(onend, 9000) // safety: onend never fires in some browsers
 }
 const gCache = new Map<string, string>()
+/* ElevenLabs: best AI voices — needs the user's API key + voice id in settings */
+const eCache = new Map<string, string>()
+async function elevenUrl(text: string, lang: string): Promise<string | null> {
+  const key = S.settings?.elevenKey || ''
+  if (!key) return null
+  const voice = (S.settings?.elevenVoice || 'JBFqnCBsd6RMkjVDRZzb').trim()
+  const k = voice + '|' + lang + '|' + text
+  let u = eCache.get(k)
+  if (u) return u
+  try {
+    const model = lang.startsWith('zh') ? 'eleven_multilingual_v2' : 'eleven_flash_v2_5'
+    const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voice)}?output_format=mp3_44100_128`,
+      { method: 'POST', headers: { 'xi-api-key': key, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, model_id: model }) })
+    if (!r.ok) return null
+    const b = await r.blob()
+    u = URL.createObjectURL(b); eCache.set(k, u); return u
+  } catch (e) { return null }
+}
 function gUrl(text: string, lang: string) {
   const k = lang + '|' + text
   let u = gCache.get(k)
@@ -34,6 +53,10 @@ function gUrl(text: string, lang: string) {
 export function speak(text: string, lang = 'zh-CN', onend?: () => void) {
   if (!text) { onend?.(); return }
   const pref = S.settings?.ttspref || 'auto'
+  const elevenify = !!S.settings?.elevenKey && (pref === 'eleven' || (pref === 'auto' && lang.startsWith('zh')))
+  if (elevenify) {
+    speakAsync(text, lang, onend); return
+  }
   const v = lang.startsWith('zh') ? pickVoice() : pickEnVoice()
   const natural = !!(v && /natural|neural/i.test(v.name))
   const useGoogle = pref === 'google' || (pref !== 'local' && !natural)
@@ -46,6 +69,13 @@ export function speak(text: string, lang = 'zh-CN', onend?: () => void) {
     } catch (e) { /* fall through to local */ }
   }
   ttsLocal(text, lang, lang.startsWith('zh') ? 0.9 : 1, onend)
+}
+/* async engine path: ElevenLabs fetch, fallback to local voice */
+function speakAsync(text: string, lang: string, onend?: () => void) {
+  elevenUrl(text, lang).then(u => {
+    if (u) { const a = new Audio(u); if (onend) a.onended = () => onend(); a.play().catch(() => ttsLocal(text, lang, 0.9, onend)) }
+    else ttsLocal(text, lang, lang.startsWith('zh') ? 0.9 : 1, onend)
+  })
 }
 export function tts(text: string, rate?: number) {
   if (!('speechSynthesis' in window) || !text) return

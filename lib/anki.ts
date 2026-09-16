@@ -99,6 +99,22 @@ export async function importApkg(file: File, onProg: (t: string) => void) {
 export function importTsv(text: string, fname: string) {
   const out: Note[] = []; const lines = text.split(/\r?\n/).filter(l => l.trim())
   for (const [i, line] of lines.entries()) {
+    /* auracle format: "How do you say 'hi' in Chinese?; 你好;; 你好呀 [r: pinyin]" */
+    if (/\[r:/i.test(line) || /how do you say/i.test(line)) {
+      const pm = /\[r:\s*([^\]]+)\]/.exec(line)
+      let body = line.replace(/\[r:[^\]]*\]/g, '').trim()
+      const parts = body.split(/;/).map(s => s.trim()).filter(Boolean)
+      // first part = question, second = primary hanzi, rest (after ';;' alternates) = extras
+      const q = parts[0] || ''
+      const zhParts = parts.slice(1)
+      if (!zhParts.length) continue
+      const mm = /show|say [''"]?["'']?([^''"]+?)[''"]? ?in (?:chinese|mandarin)\b/i.exec(q) || /[''"]([^''"]+)[''"]/.exec(q)
+      const meaning = (mm && mm[1] ? mm[1] : q.replace(/^(how|what).+?[''"]?([^''";]+)[''"]? ?in (?:chinese|mandarin)\b.*$/i, '$2'))
+        .trim() || q
+      out.push({ id: 't' + fname + i, deckId: 'tsv-' + fname, deck: fname, hanzi: zhParts.join(' / '), pinyin: pm ? pm[1].trim() : '', meaning,
+        sound: null, img: null, sHz: '', sPy: '', sMean: '', sSound: null, k: 0 })
+      continue
+    }
     const cols = line.split('\t').map(clean).filter(Boolean)
     if (cols.length < 2) { const c2 = line.split(/;|,/).map(clean); if (c2.length >= 2) cols.push(...c2) }
     let [hanzi, pinyin, meaning] = cols as [string?, string?, string?]
