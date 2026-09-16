@@ -14,6 +14,7 @@ export interface Settings {
   noautoplay: boolean; waitaudio: boolean; maxsec: number; newsrt: string; revsrt: string
   newafter: boolean; ret: number; maxivl: number
   mode?: 'silent' | 'voice' | 'chat'; ttspref?: 'auto' | 'local' | 'google' | 'eleven' | 'openai'
+  asr?: 'auto' | 'browser' | 'eleven'
   elevenKey?: string; elevenVoice?: string; elevenVoiceEn?: string; openaiKey?: string
 }
 export type QItem = Note | { sentNote: Note; teach?: boolean }

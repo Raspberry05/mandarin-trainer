@@ -543,7 +543,7 @@ function advance() {
 }
 
 /* ---------- settings UI ---------- */
-const SKEYS = ['newday', 'maxrev', 'steps', 'relearn', 'leech', 'leechact', 'noautoplay', 'waitaudio', 'maxsec', 'newsrt', 'revsrt', 'newafter', 'ret', 'maxivl', 'mode', 'ttspref', 'elevenKey', 'elevenVoice', 'elevenVoiceEn', 'openaiKey']
+const SKEYS = ['newday', 'maxrev', 'steps', 'relearn', 'leech', 'leechact', 'noautoplay', 'waitaudio', 'maxsec', 'newsrt', 'revsrt', 'newafter', 'ret', 'maxivl', 'mode', 'ttspref', 'asr', 'elevenKey', 'elevenVoice', 'elevenVoiceEn', 'openaiKey']
 export function saveSettings() { save(LS.s, S.settings); sbPushIfUser() }
 function sbPushIfUser() { import('./bundled').then(m => m.sbPush().catch(() => {})) }
 function fillSettings(src: Partial<Settings>) {

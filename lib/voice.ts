@@ -3,7 +3,7 @@
    Self-contained: owns the mic token lifecycle. Study-flow effects (suspend/pause) are injected. */
 import { S, $, esc, type Note } from './state'
 import { playAudio, playSent, speak } from './audio'
-import { srSupported, listenZh, listenCmd, micMeter, similarity, PASS, type ListenHandle, type MeterHandle, type Cmd } from './speech'
+import { srSupported, listenZh, listenCmd, micMeter, recordUtterance, sttEleven, similarity, PASS, type ListenHandle, type MeterHandle, type Cmd } from './speech'
 import { btn, setActions, promptAppend } from './dom'
 
 let micToken = 0
@@ -47,7 +47,9 @@ export function voiceTest(target: string, pass: () => void, fail: () => void, io
     micMeter(lvl => { const b = $('mic-bar'); if (b) b.style.width = Math.max(2, Math.min(100, lvl * 130)) + '%' })
       .then(h => { meterH = h; if (h) { if (ms) { ms.classList.add('ok'); ms.textContent = '🎙 listening · mic connected' } }
         else { ($('mic-bar-wrap') as HTMLElement).style.opacity = '.35'; if (ms) { ms.classList.remove('ok'); ms.textContent = '⚠ mic blocked — allow microphone access' } } }) }
-  let tries = 0, echo = false
+  let tries = 0, echo = false, noSpeechStreak = 0
+  // ASR engine: browser Web Speech first; after 2 consecutive no-speech (or setting asr=eleven) use ElevenLabs Scribe
+  const useEleven = () => S.settings?.asr === 'eleven' || (S.settings?.asr !== 'browser' && noSpeechStreak >= 2)
   const atts: { t: string; sim: number; ok?: boolean }[] = []
   const renderAtt = () => { const el = $('att-list'); if (!el) return
     el.innerHTML = atts.map((a, i) => `<div class="att${i === atts.length - 1 ? ' now' : ''}"><span class="${a.ok ? 'ok' : 'x'}">${a.ok ? '✓' : '✗'}</span><span>“${esc(a.t)}”</span><span class="hint" style="margin-left:auto">${Math.round(a.sim * 100)}%</span></div>`).join('') }
@@ -88,6 +90,7 @@ export function voiceTest(target: string, pass: () => void, fail: () => void, io
     ctl.innerHTML = ''; line.textContent = echo ? '🎙 echo it — say the answer out loud' : '🎙 listening… say it in Mandarin' }
   const listenOnce = () => { if (tok !== micToken) return
     stopCmd()
+    if (useEleven()) return elevenOnce()
     const hzEl = $('live-hz'); if (hzEl) hzEl.textContent = ''
     line.textContent = echo ? '🎙 echo it — say the answer out loud' : '🎙 listening… say it in Mandarin'
     let h: ListenHandle | null = null
@@ -98,6 +101,7 @@ export function voiceTest(target: string, pass: () => void, fail: () => void, io
         const hzEl = $('live-hz'); if (hzEl) hzEl.textContent = t
         line.textContent = echo ? '🎙 echo it — say the answer out loud' : '🎙 listening… say it in Mandarin' },
       t => { if (tok !== micToken) return
+        noSpeechStreak = 0
         const sim = similarity(t, target)
         if (sim >= PASS) {
           atts.push({ t, sim, ok: true }); renderAtt()
@@ -110,10 +114,35 @@ export function voiceTest(target: string, pass: () => void, fail: () => void, io
       e => { if (tok !== micToken) return
         // silence (no-speech / onend-without-match): auto re-listen twice before giving up
         if (!echo && tries < 2 && /catch anything|no-speech/i.test(String(e))) {
-          tries++; line.textContent = "🎙 didn't catch anything — listening again…"
+          tries++; noSpeechStreak++; line.textContent = "🎙 didn't catch anything — listening again…"
           setTimeout(() => { if (tok === micToken) listenOnce() }, 900); return }
         line.textContent = '⚠ ' + e; cmdLoop() })
     }, 450)
+  }
+  const elevenOnce = () => { if (tok !== micToken) return
+    line.textContent = echo ? '🎙 recording — say the answer back (ElevenLabs)' : '🎙 recording — say it in Mandarin (ElevenLabs)'
+    setTimeout(async () => { // let the question audio finish before capturing
+      if (tok !== micToken) return
+      const blob = await recordUtterance()
+      if (tok !== micToken) return
+      if (!blob) { if (!echo && tries < 2) { tries++; line.textContent = "🎙 didn't catch that — recording again…"; setTimeout(() => { if (tok === micToken) elevenOnce() }, 900); return }
+        line.textContent = '⚠ mic/recorder unavailable'; cmdLoop(); return }
+      line.textContent = '🌐 transcribing…'
+      const t = await sttEleven(blob)
+      if (tok !== micToken) return
+      if (!t) { if (!echo && tries < 2) { tries++; line.textContent = '🌐 transcription empty — recording again…'; setTimeout(() => { if (tok === micToken) elevenOnce() }, 900); return }
+        line.textContent = '⚠ transcription failed (stt HTTP error — see diag)'; cmdLoop(); return }
+      noSpeechStreak = 0
+      const hzEl2 = $('live-hz'); if (hzEl2) hzEl2.textContent = t
+      const sim = similarity(t, target)
+      if (sim >= PASS) {
+        atts.push({ t, sim, ok: true }); renderAtt()
+        if (echo) { line.innerHTML = `✅ echoed: “${esc(t)}” <span class="hint">— graded Again so it comes back soon</span>`
+          stopCmdAll(); setTimeout(() => { if (tok === micToken) fail() }, 1300) }
+        else { line.innerHTML = `✅ heard: “${esc(t)}” <span class="hint">(${Math.round(sim * 100)}% match)</span>`
+          ctl.innerHTML = ''; stopCmdAll(); setTimeout(() => { if (tok === micToken) pass() }, 1100) }
+      } else reAttempt(t, sim)
+    }, echo ? 0 : 1450)
   }
   const reAttempt = (heard?: string, sim = 0) => {
     if (tok !== micToken) return

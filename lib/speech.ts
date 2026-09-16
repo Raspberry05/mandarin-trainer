@@ -101,3 +101,51 @@ export function similarity(said: string, target: string) {
   return Math.max(0, 1 - d / Math.max(a.length, b.length))
 }
 export const PASS = 0.75
+
+/* ---------- ElevenLabs Scribe fallback: record an utterance, transcribe server-side ---------- */
+/* records until 1.3s of silence after speech starts, or maxMs; returns the audio blob */
+export async function recordUtterance(maxMs = 7000, silenceMs = 1300): Promise<Blob | null> {
+  let st: MediaStream | null = null
+  try {
+    st = await navigator.mediaDevices.getUserMedia({ audio: true })
+    const AC = (window as any).AudioContext || (window as any).webkitAudioContext
+    const ctx = new AC()
+    if (ctx.state === 'suspended') { try { await ctx.resume() } catch (e) {} }
+    const src = ctx.createMediaStreamSource(st)
+    const an = ctx.createAnalyser(); an.fftSize = 512
+    src.connect(an)
+    const buf = new Uint8Array(an.frequencyBinCount)
+    const level = () => { an.getByteFrequencyData(buf); let s = 0; for (const v of buf) s += v; return (s / buf.length) / 60 }
+    const rec = new MediaRecorder(st)
+    const chunks: Blob[] = []
+    rec.ondataavailable = (e: any) => { if (e.data && e.data.size) chunks.push(e.data) }
+    const done = new Promise<Blob>(res => { rec.onstop = () => res(new Blob(chunks, { type: rec.mimeType || 'audio/webm' })) })
+    rec.start()
+    const t0 = Date.now(); let spoke = false, quietSince = 0
+    await new Promise<void>(res => {
+      const tick = () => {
+        const lvl = level()
+        if (lvl > 0.09) { spoke = true; quietSince = Date.now() }
+        else if (spoke && !quietSince) quietSince = Date.now()
+        const silent = spoke && quietSince && Date.now() - quietSince > silenceMs
+        if (silent || Date.now() - t0 > maxMs) { res(); return }
+        setTimeout(tick, 80) }
+      setTimeout(tick, 250) })
+    try { rec.stop() } catch (e) {}
+    const blob = await done
+    try { st.getTracks().forEach(t => t.stop()) } catch (e) {}
+    try { ctx.close() } catch (e) {}
+    return blob && blob.size > 1200 ? blob : null
+  } catch (e: any) { diag('recorder failed: ' + (e?.message || e))
+    try { st?.getTracks().forEach(t => t.stop()) } catch (e2) {}
+    return null }
+}
+/* transcribe via /api/stt (server ElevenLabs Scribe) */
+export async function sttEleven(blob: Blob): Promise<string | null> {
+  try {
+    const r = await fetch('/api/stt', { method: 'POST', body: blob })
+    if (!r.ok) { diag('stt HTTP ' + r.status); return null }
+    const j = await r.json()
+    return String(j.text || '') || null
+  } catch (e) { diag('stt fetch failed: ' + e); return null }
+}
