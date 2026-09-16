@@ -148,6 +148,7 @@ footer{position:fixed;bottom:0;left:0;right:0;background:rgba(20,26,35,.85);back
 <input type="file" id="file-in" accept=".apkg,.colpkg,.txt,.csv" multiple hidden>
 <button id="settings-btn">⚙ Settings</button>
 <button id="reset-card-btn" title="Erase ALL progress for this deck and start over">♻ Reset deck</button>
+<button id="auth-btn">👤 Sign in</button>
 </header>
 <main>
 <div id="home-view">
@@ -226,13 +227,30 @@ footer{position:fixed;bottom:0;left:0;right:0;background:rgba(20,26,35,.85);back
 </div>
 </div>
 
+<div class="modal" id="auth-modal">
+<div class="mbox">
+<h2>👤 Sign in</h2>
+<p class="hint">sync your progress across devices (phone ↔ desktop). we email you a one-time code — no password.</p>
+<div class="row"><label>Email</label><input type="email" id="auth-email" placeholder="you@example.com"></div>
+<div class="row" id="auth-code-wrap" style="display:none"><label>6-digit code</label><input type="text" id="auth-code" inputmode="numeric" maxlength="8" placeholder="123456"></div>
+<div class="btnrow" style="margin-top:14px">
+<button id="auth-send" class="primary">✉ Send code</button>
+<button id="auth-verify" style="display:none">Verify & sign in</button>
+<button id="auth-out" style="display:none">Sign out</button>
+<button id="auth-cancel">Close</button>
+</div>
+<div id="auth-msg" class="hint" style="margin-top:10px"></div>
+</div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/sql-wasm.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/fzstd@0.1.1/umd/index.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
 "use strict";
 /* ---------- storage ---------- */
-const LS={p:'ast_progress',s:'ast_settings',pr:'ast_presets',c:'ast_counts',bdo:'ast_bundled_off'};
+const LS={p:'ast_progress',s:'ast_settings',pr:'ast_presets',c:'ast_counts',bdo:'ast_bundled_off',lastmod:'ast_lastmod'};
 const load=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}};
 const save=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
 let progress=load(LS.p,{});
@@ -513,7 +531,7 @@ function buildQueue(){
   return q}
 function pOf(id){if(!progress[id]){progress[id]={state:'new',step:0,due:0,ivl:0,ease:2.5,lapses:0};}
   return progress[id]}
-function persist(){save(LS.p,progress);save(LS.c,counts)}
+function persist(){save(LS.p,progress);save(LS.c,counts);sbQueue()}
 function grade(action){ // Again Hard Good Easy = 0 1 2 3
   const p=pOf(cur.id);const L=parseSteps(settings.steps)||[5,50,120];
   const R=parseSteps(settings.relearn)||[5,50,120];const m=mult();
@@ -862,7 +880,7 @@ function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>'
 
 /* ---------- settings UI ---------- */
 const SKEYS=['newday','maxrev','steps','relearn','leech','leechact','noautoplay','waitaudio','maxsec','newsrt','revsrt','newafter','ret','maxivl'];
-function saveSettings(){save(LS.s,settings)}
+function saveSettings(){save(LS.s,settings);sbQueue()}
 function fillSettings(src){SKEYS.forEach(k=>{const el=$('s-'+k);
   el[el.type==='checkbox'?'checked':'value']=src[k]});
   const ps=$('s-preset');ps.innerHTML='';for(const n of Object.keys(presets)){
@@ -881,7 +899,7 @@ window.addEventListener('unhandledrejection',e=>diag('Promise error: '+((e.reaso
 
 /* ---------- build info ---------- */
 let lastCommit=null;
-const BUILD_DATE=1789498811;
+const BUILD_DATE=1789528786;
 function relTime(t){const s=(Date.now()-t)/1000;
   if(s<60)return Math.max(0,Math.floor(s))+'s ago';
   if(s<3600)return Math.floor(s/60)+'m ago';
@@ -898,6 +916,50 @@ async function loadBuild(){try{
   if(!r.ok)throw 0;const j=await r.json();
   lastCommit={sha:j.sha.slice(0,7),t:new Date(j.commit.committer.date).getTime()};
   renderBuild()}catch(e){$('build-info').textContent='build info unavailable'}}
+
+/* ---------- Supabase sign-in & cloud sync ---------- */
+const SB_URL='https://vjtflpfcabnsboaxslhf.supabase.co';
+const SB_KEY='sb_publishable_aQjmfANQ48CFX9xygOqDbQ_puqF5she';
+let sb=null,sbUser=null,sbTimer=null;
+try{if(window.supabase)sb=window.supabase.createClient(SB_URL,SB_KEY)}catch(e){diag('supabase init: '+e)}
+function snapshotState(){return{progress,settings,presets,counts,ts:Date.now()}}
+function sbQueue(){if(!sbUser)return;clearTimeout(sbTimer);sbTimer=setTimeout(sbPush,2500)}
+async function sbPush(){if(!sbUser)return;try{
+  await sb.from('user_state').upsert({user_id:sbUser.id,data:snapshotState(),updated_at:new Date().toISOString()});
+  save(LS.lastmod,Date.now());diag('sync: pushed')}catch(e){diag('sync push: '+e)}}
+async function sbPull(){if(!sbUser)return;try{
+  const {data,error}=await sb.from('user_state').select('data,updated_at').eq('user_id',sbUser.id).maybeSingle();
+  if(error||!data||!data.data){sbPush();return}
+  const cloudTs=Date.parse(data.updated_at),localTs=load(LS.lastmod,0)||0;
+  if(cloudTs>localTs&&data.data){progress=data.data.progress||{};
+    if(data.data.settings)settings={...DEF,...data.data.settings};
+    if(data.data.presets)presets=data.data.presets;
+    if(data.data.counts)counts=data.data.counts;
+    save(LS.p,progress);save(LS.s,settings);save(LS.pr,presets);save(LS.c,counts);
+    diag('sync: restored cloud ('+new Date(cloudTs).toISOString()+')');statsView()}
+  else sbPush()}catch(e){diag('sync pull: '+e)}}
+async function sbInit(){if(!sb)return;
+  try{const {data:{session}}=await sb.auth.getSession();
+    if(session?.user){sbUser=session.user;sbBtnLabel();sbPull()}}catch(e){}}
+async function sbSend(){$('auth-msg').textContent='sending code…';
+  const e=$('auth-email').value.trim();if(!e){$('auth-msg').textContent='⚠ enter your email';return}
+  const {error}=await sb.auth.signInWithOtp({email:e,options:{shouldCreateUser:true}});
+  if(error){$('auth-msg').textContent='⚠ '+error.message;return}
+  $('auth-msg').textContent='✅ code sent — check your inbox (and spam)';
+  $('auth-code-wrap').style.display='';$('auth-verify').style.display=''}
+async function sbVerify(){const code=$('auth-code').value.trim();const email=$('auth-email').value.trim();
+  if(!code){$('auth-msg').textContent='⚠ enter the code from the email';return}
+  const {data,error}=await sb.auth.verifyOtp({email,token:code,type:'email'});
+  if(error){$('auth-msg').textContent='⚠ '+error.message;return}
+  sbUser=data.user;sbBtnLabel();sbCloseModal();
+  $('import-status').innerHTML='✅ signed in — progress syncing';
+  sbPull()}
+async function sbSignOut(){try{await sb.auth.signOut()}catch(e){}
+  sbUser=null;sbBtnLabel();sbCloseModal()}
+function sbBtnLabel(){const b=$('auth-btn');if(!b)return;
+  b.textContent=sbUser?'⬥ '+String(sbUser.email||'').split('@')[0]:'👤 Sign in'}
+function sbCloseModal(){$('auth-modal').classList.remove('open')}
+function sbOpenModal(){$('auth-modal').classList.add('open')}
 
 /* ---------- wiring ---------- */
 $('import-btn').onclick=()=>$('file-in').click();
@@ -945,6 +1007,12 @@ $('reset-card-btn').onclick=()=>{
   persist();statsView();
   sentSeen.clear();queue=[];idler()};
 $('settings-close').onclick=closeSettings;
+$('auth-btn').onclick=()=>{if(sbUser){$('auth-out').style.display='';
+    $('auth-msg').textContent='signed in as '+(sbUser.email||'')+' — progress auto-syncs';sbOpenModal()}
+  else{$('auth-out').style.display='none';$('auth-code-wrap').style.display='none';
+    $('auth-verify').style.display='none';$('auth-msg').textContent='';sbOpenModal()}};
+$('auth-send').onclick=sbSend;$('auth-verify').onclick=sbVerify;
+$('auth-out').onclick=sbSignOut;$('auth-cancel').onclick=sbCloseModal;
 $('deck-close').onclick=()=>$('deck-modal').classList.remove('open');
 $('preset-save').onclick=()=>{const n=$('s-pname').value.trim()||'Default';
   readSettings();presets[n]={...settings};save(LS.pr,presets);openSettings()};
@@ -962,6 +1030,7 @@ document.addEventListener('keydown',e=>{
 setInterval(()=>{if(cur&&(stage===0||stage===1)&&progress[cur.id]&&(progress[cur.id].state==='learn'||progress[cur.id].state==='relearn')&&progress[cur.id].due<=Date.now()){/* learning cards resurface handled by queue */}},10000);
 window.addEventListener('load',async()=>{speechSynthesis.onvoiceschanged=()=>pickVoice();
   try{await getSQL()}catch(e){}
+  sbInit();
   $('boot').style.display='none';
   loadBuild();setInterval(renderBuild,30000);
   try{diag('boot: loading saved decks…');
