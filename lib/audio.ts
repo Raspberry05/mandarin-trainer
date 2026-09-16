@@ -4,8 +4,48 @@ import { S, esc, Note } from './state'
 /* ---------- TTS & audio ---------- */
 export function pickVoice() {
   const vs = speechSynthesis.getVoices()
-  return vs.find(v => /zh[-_]CN/i.test(v.lang) && /female|mei|ting|yaoyao|huihui/i.test(v.name))
+  return vs.find(v => /zh[-_]CN/i.test(v.lang) && /natural|neural/i.test(v.name))
+      || vs.find(v => /zh[-_]CN/i.test(v.lang) && /female|mei|ting|yaoyao|huihui/i.test(v.name))
       || vs.find(v => /^zh/i.test(v.lang)) || null
+}
+export function pickEnVoice() {
+  const vs = speechSynthesis.getVoices()
+  return vs.find(v => /^en/i.test(v.lang) && /natural|neural/i.test(v.name))
+      || vs.find(v => /^en/i.test(v.lang)) || null
+}
+function ttsLocal(text: string, lang: string, rate: number, onend?: () => void) {
+  if (!('speechSynthesis' in window) || !text) { onend?.(); return }
+  speechSynthesis.cancel()
+  const u = new SpeechSynthesisUtterance(text)
+  u.lang = lang; u.rate = rate
+  const v = lang.startsWith('zh') ? pickVoice() : pickEnVoice(); if (v) u.voice = v
+  if (onend) u.onend = () => onend()
+  speechSynthesis.speak(u)
+  if (onend) setTimeout(onend, 9000) // safety: onend never fires in some browsers
+}
+const gCache = new Map<string, string>()
+function gUrl(text: string, lang: string) {
+  const k = lang + '|' + text
+  let u = gCache.get(k)
+  if (!u) { u = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${lang}&q=${encodeURIComponent(text)}`; gCache.set(k, u) }
+  return u
+}
+/* speak: best available engine — natural device voice, else Google TTS */
+export function speak(text: string, lang = 'zh-CN', onend?: () => void) {
+  if (!text) { onend?.(); return }
+  const pref = S.settings?.ttspref || 'auto'
+  const v = lang.startsWith('zh') ? pickVoice() : pickEnVoice()
+  const natural = !!(v && /natural|neural/i.test(v.name))
+  const useGoogle = pref === 'google' || (pref !== 'local' && !natural)
+  if (useGoogle) {
+    try {
+      const a = new Audio(gUrl(text, lang.startsWith('zh') ? 'zh-CN' : 'en'))
+      if (onend) a.onended = () => onend()
+      a.play().catch(() => { ttsLocal(text, lang, 0.9); if (onend) setTimeout(onend, 600) })
+      return
+    } catch (e) { /* fall through to local */ }
+  }
+  ttsLocal(text, lang, lang.startsWith('zh') ? 0.9 : 1, onend)
 }
 export function tts(text: string, rate?: number) {
   if (!('speechSynthesis' in window) || !text) return
@@ -31,11 +71,11 @@ export function fallbackArt(note: { sHz?: string; hanzi?: string; id: string }) 
 }
 export function playSound(note: Note) {
   const m = soundUrl(note)
-  if (m) { const a = new Audio(m); a.play().catch(() => tts(note.hanzi)); return true }
+  if (m) { const a = new Audio(m); a.play().catch(() => speak(note.hanzi)); return true }
   return false
 }
-export function playAudio(note: Note) { if (!playSound(note)) tts(note.hanzi || note.pinyin) }
+export function playAudio(note: Note) { if (!playSound(note)) speak(note.hanzi || note.pinyin) }
 export function playSent(n: Note) {
   const m = n.sSound && soundUrl({ sound: n.sSound })
-  if (m) { new Audio(m).play().catch(() => tts(n.sHz)) } else tts(n.sHz || n.hanzi)
+  if (m) { const a = new Audio(m); a.play().catch(() => speak(n.sHz || n.hanzi)) } else speak(n.sHz || n.hanzi)
 }

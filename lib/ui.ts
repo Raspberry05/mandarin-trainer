@@ -1,6 +1,7 @@
 "use strict"
 import { S, $, esc, diag, rollCounts, pOf, persist, isDue, hskLevel, lessons, liveNotes, activeNote, sentReady, sentComplete, sentWords, sHzHas, load, save, LS, type Note, type Prog, type QItem, type Settings } from './state'
-import { imgSrc, fallbackArt, playAudio, playSent, soundUrl, pickVoice } from './audio'
+import { imgSrc, fallbackArt, playAudio, playSent, soundUrl, pickVoice, speak } from './audio'
+import { srSupported, listenZh, similarity, PASS, type ListenHandle } from './speech'
 import { buildQueue, grade, gradeSent } from './srs'
 import { saveAll, loadStored } from './idb'
 import { loadBundled } from './bundled'
@@ -100,6 +101,50 @@ function startTimer() {
     const left = Math.max(0, S.settings!.maxsec - (Date.now() - S.t0) / 1000)
     $('timer')!.textContent = Math.ceil(left) + 's'; if (left <= 0) stopTimer()
   }, 250)
+}
+
+/* ---------- modes: silent (flashcards) vs voice (mic answers) ---------- */
+const qHtml = (m: string) => `<div class="hint">do you know how to say</div>
+  <div class="meaning" style="font-size:27px;color:#e8edf3">“${esc(m)}”</div>
+  <div class="hint">in Mandarin?</div>`
+function voice() { return S.settings!.mode === 'voice' }
+let micToken = 0
+function voiceTest(target: string, pass: () => void, fail: () => void) {
+  const tok = ++micToken
+  const meaning = target
+  const sayQ = (cb?: () => void) => speak(`Do you know how to say ${meaning} in Mandarin?`, 'en', cb)
+  if (!srSupported()) {
+    $('prompt')!.innerHTML += '<div class="hint" style="color:var(--warn)">⚠ mic not supported in this browser — flashcard fallback (Chrome/Edge recommended)</div>'
+    setActions(btn('✅ I know it', 'g-next', pass, 'enter'), btn('❌ I don\'t know it', 'g-again', fail))
+    return
+  }
+  $('prompt')!.innerHTML += '<div id="mic-line" class="hint" style="font-size:19px;min-height:28px"></div><div id="mic-ctl" class="btnrow"></div>'
+  const line = $('mic-line')!, ctl = $('mic-ctl')!
+  const replay = btn('🔊 Replay question', undefined, () => { sayQ() })
+  const skip = btn('Skip — show answer', 'g-hard', fail)
+  const arm = () => { if (tok !== micToken) return
+    ctl.innerHTML = ''; line.textContent = '🎙 tap Speak now, then say the Mandarin'
+    ctl.appendChild(btn('🎙 Speak now', 'primary', run)); ctl.appendChild(replay); ctl.appendChild(skip) }
+  const run = () => { if (tok !== micToken) return
+    try { speechSynthesis.cancel() } catch (e) {}
+    line.textContent = '🎙 listening… speak now'; ctl.innerHTML = ''
+    ctl.appendChild(btn('■ Stop', 'g-again', () => { h?.stop(); arm() }))
+    let h: ListenHandle | null = null
+    h = listenZh(
+      t => { if (tok === micToken) line.textContent = '🎙 ' + t },
+      t => { if (tok !== micToken) return
+        const sim = similarity(t, target)
+        if (sim >= PASS) { line.innerHTML = `✅ heard: “${esc(t)}” <span class="hint">(${Math.round(sim * 100)}% match)</span>`
+          ctl.innerHTML = ''
+          setTimeout(() => { if (tok === micToken) pass() }, 1100) }
+        else { line.innerHTML = `❌ heard: “${esc(t)}” <span class="hint">(${Math.round(sim * 100)}% match — doesn't match the target)</span>`
+          ctl.innerHTML = ''
+          ctl.appendChild(btn('🎙 Try again', 'primary', run)); ctl.appendChild(replay); ctl.appendChild(skip) } },
+      e => { if (tok !== micToken) return
+        line.textContent = '⚠ ' + e; arm() })
+  }
+  sayQ(() => { if (tok === micToken) run() }) // auto-listen after the question is spoken
+  arm()
 }
 
 /* ---------- placement quiz ---------- */
@@ -304,12 +349,12 @@ export function showListen() {
 }
 function showWordTest() {
   S.stage = 2; $('stage-lbl')!.textContent = 'test — how do you say it?'
-  setPrompt(`<div class="hint">how do you say this in Mandarin?</div>
-    <div class="meaning" style="font-size:28px;color:#e8edf3">${esc(S.cur!.meaning)}</div>
-    <div class="hint">say it aloud — then judge yourself. no hints.</div>`)
+  const m = S.cur!.meaning || S.cur!.pinyin
+  setPrompt(qHtml(m))
   fbClear()
+  if (voice()) return voiceTest(m, () => testReveal(true), () => testReveal(false))
   setActions(btn('✅ I know it', 'g-next', () => testReveal(true), 'enter'),
-    btn('❌ I don\'t know', 'g-again', () => testReveal(false)))
+    btn('❌ I don\'t know it', 'g-again', () => testReveal(false)))
 }
 function removeCard() { if (!S.cur) return
   if (!confirm('Delete "' + (S.cur.hanzi || '') + '" permanently from this deck?')) return
@@ -328,12 +373,12 @@ function testReveal(known: boolean) {
 }
 export function showSentQ() {
   S.stage = 5; $('stage-lbl')!.textContent = 'sentence — first practice'
-  setPrompt(`<div class="hint">how do you say this sentence?</div>
-    <div class="meaning" style="font-size:27px;color:#e8edf3">${esc(S.cur!.sMean || S.cur!.sHz)}</div>
-    <div class="hint">you know every word in it. say the whole sentence aloud.</div>`)
+  const m = S.cur!.sMean || S.cur!.sHz
+  setPrompt(qHtml(m) + `<div class="hint">you know every word in it. say the whole sentence aloud.</div>`)
   fbClear()
-  setActions(btn('✅ I said it', 'g-next', () => showSentR(), 'enter'),
-    btn('👀 Show me', 'g-hard', () => showSentR()))
+  if (voice()) return voiceTest(m, () => sentRevealDone(), () => showSentFail())
+  setActions(btn('✅ I know it', 'g-next', () => sentRevealDone(), 'enter'),
+    btn('❌ I don\'t know it', 'g-again', () => showSentFail()))
 }
 /* fixed: legacy shipped showSentR calls that crashed — now aliased to sentence reveal */
 function showSentR() { sentRevealDone() }
@@ -350,16 +395,14 @@ function finish(action: number) {
 }
 export function showSentTest() {
   S.stage = 4; $('stage-lbl')!.textContent = 'sentence review — how do you say it?'
-  setPrompt(`<div class="hint">🔊 listen, then recall — how do you say this in Mandarin?</div>
-    <div class="meaning" style="font-size:27px;color:#e8edf3">${esc(S.cur!.sMean || S.cur!.sHz)}</div>
-    <div class="hint">say it aloud before judging yourself. hanzi reveals after grading.</div>`)
+  const m = S.cur!.sMean || S.cur!.sHz
+  setPrompt(qHtml(m) + `<div class="hint">hanzi reveals after you answer.</div>`)
   fbClear()
+  if (voice()) return voiceTest(m, () => { gradeSent(2); sentRevealDone() }, () => { gradeSent(0); showSentFail() })
   if (!S.settings!.noautoplay) playSent(S.cur!)
   setActions(btn('🔊 Replay', undefined, () => playSent(S.cur!), 'space'),
-    btn('1 Again', 'g-again', () => { gradeSent(0); showSentFail() }),
-    btn('2 Hard', 'g-hard', () => { gradeSent(1); sentRevealDone() }),
-    btn('3 Good', 'g-good', () => { gradeSent(2); sentRevealDone() }, 'enter'),
-    btn('4 Easy', 'g-easy', () => { gradeSent(3); sentRevealDone() }))
+    btn('✅ I know it', 'g-good', () => { gradeSent(2); sentRevealDone() }, 'enter'),
+    btn('❌ I don\'t know it', 'g-again', () => { gradeSent(0); showSentFail() }))
 }
 function sentRevealDone() {
   S.stage = 5
@@ -369,10 +412,6 @@ function sentRevealDone() {
   playSent(S.cur!)
   setActions(btn('🔊 Replay', undefined, () => playSent(S.cur!), 'space'),
     btn('Next →', 'primary', advance, 'enter'))
-}
-function gradeSentFix(a: 'know' | 'show') {
-  // (kept for possible tuning; current flow uses gradeSent numerically)
-  void a; void gradeSent
 }
 function showSentFail() {
   S.stage = 6; $('stage-lbl')!.textContent = 'sentence forgotten — relearn the words'
@@ -417,7 +456,7 @@ function advance() {
 }
 
 /* ---------- settings UI ---------- */
-const SKEYS = ['newday', 'maxrev', 'steps', 'relearn', 'leech', 'leechact', 'noautoplay', 'waitaudio', 'maxsec', 'newsrt', 'revsrt', 'newafter', 'ret', 'maxivl']
+const SKEYS = ['newday', 'maxrev', 'steps', 'relearn', 'leech', 'leechact', 'noautoplay', 'waitaudio', 'maxsec', 'newsrt', 'revsrt', 'newafter', 'ret', 'maxivl', 'mode', 'ttspref']
 export function saveSettings() { save(LS.s, S.settings); sbPushIfUser() }
 function sbPushIfUser() { import('./bundled').then(m => m.sbPush().catch(() => {})) }
 function fillSettings(src: Partial<Settings>) {
@@ -434,6 +473,7 @@ function readSettings() {
 }
 function openSettings() { fillSettings(S.settings!); $('settings-modal')!.classList.add('open') }
 function closeSettings() { readSettings(); statsView(); $('settings-modal')!.classList.remove('open') }
+function applyModeLabel() { const b = $('mode-btn'); if (b) b.textContent = voice() ? '🎙 Voice mode' : '🔇 Silent mode' }
 
 /* ---------- build info ---------- */
 function relTime(t: number) { const s = (Date.now() - t) / 1000
@@ -525,6 +565,13 @@ export function init() {
     e.preventDefault(); S.dragDepth = 0; $('drop-overlay')!.classList.remove('show')
     if (e.dataTransfer?.files?.length) importFiles([...e.dataTransfer.files as unknown as File[]]) })
   ;($('settings-btn') as HTMLElement)!.onclick = openSettings
+  ;($('mode-btn') as HTMLElement)!.onclick = () => {
+    S.settings!.mode = voice() ? 'silent' : 'voice'
+    saveSettings(); applyModeLabel()
+    micToken++ // kill any live mic session
+    if (S.view === 'study' && S.cur && (S.stage === 2 || S.stage === 4)) {
+      S.stage === 2 ? showWordTest() : showSentTest() } }
+  applyModeLabel()
   ;($('reset-card-btn') as HTMLElement)!.onclick = () => {
     if (!S.studyDeck) { alert('No deck active.'); return }
     const ns = S.notes.filter(n => n.deckId === S.studyDeck)
