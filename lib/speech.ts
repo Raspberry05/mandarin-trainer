@@ -1,5 +1,5 @@
 "use strict"
-import { normHz, lev } from './state'
+import { normHz, lev, diag } from './state'
 
 /* ---------- Web Speech API (browser ASR) ---------- */
 export const srSupported = () =>
@@ -14,6 +14,7 @@ export async function micMeter(cb: (lvl: number) => void): Promise<MeterHandle |
     const st = await navigator.mediaDevices.getUserMedia({ audio: true })
     const AC = (window as any).AudioContext || (window as any).webkitAudioContext
     const ctx = new AC()
+    if (ctx.state === 'suspended') { try { await ctx.resume() } catch (e) {} } // autoplay policy — must resume after gesture
     const src = ctx.createMediaStreamSource(st)
     const an = ctx.createAnalyser(); an.fftSize = 512
     src.connect(an)
@@ -28,7 +29,7 @@ export async function micMeter(cb: (lvl: number) => void): Promise<MeterHandle |
     return { stop: () => { live = false
       try { st.getTracks().forEach(t => t.stop()) } catch (e) {}
       try { ctx.close() } catch (e) {} } }
-  } catch (e) { return null }
+  } catch (e: any) { diag('mic meter failed: ' + (e?.message || e)); return null }
 }
 
 export function listenZh(

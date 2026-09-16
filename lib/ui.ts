@@ -413,11 +413,13 @@ export function showListen() {
     btn('Test me →', 'primary', showWordTest, 'enter'))
 }
 function showWordTest() {
-  S.stage = 2; $('stage-lbl')!.textContent = 'test — how do you say it?'
+  S.stage = 2
   const m = S.cur!.meaning || S.cur!.pinyin
+  if (voice()) { $('stage-lbl')!.textContent = '🎙 voice — how do you say it?'; fbClear()
+    return voiceTest(m, () => testReveal(true), () => testReveal(false), { suspend: suspendCur, pause: pauseSess, sent: false }) }
+  $('stage-lbl')!.textContent = 'test — how do you say it?'
   setPrompt(qHtml(m))
   fbClear()
-  if (voice()) return voiceTest(m, () => testReveal(true), () => testReveal(false), { suspend: suspendCur, pause: pauseSess, sent: false })
   setActions(btn('✅ I know it', 'g-next', () => testReveal(true), 'enter'),
     btn('❌ I don\'t know it', 'g-again', () => testReveal(false)))
 }
@@ -449,11 +451,13 @@ function testReveal(known: boolean) {
     btn('Continue →', 'primary', () => finish(known ? 2 : 0), 'enter'))
 }
 export function showSentQ() {
-  S.stage = 5; $('stage-lbl')!.textContent = 'sentence — first practice'
+  S.stage = 5
   const m = S.cur!.sMean || S.cur!.sHz
+  if (voice()) { $('stage-lbl')!.textContent = '🎙 voice — say the sentence'; fbClear()
+    return voiceTest(m, () => sentRevealDone(), () => showSentFail(), { suspend: suspendCur, pause: pauseSess, sent: true }) }
+  $('stage-lbl')!.textContent = 'sentence — first practice'
   setPrompt(qHtml(m) + `<div class="hint">you know every word in it. say the whole sentence aloud.</div>`)
   fbClear()
-  if (voice()) return voiceTest(m, () => sentRevealDone(), () => showSentFail(), { suspend: suspendCur, pause: pauseSess, sent: true })
   setActions(btn('✅ I know it', 'g-next', () => sentRevealDone(), 'enter'),
     btn('❌ I don\'t know it', 'g-again', () => showSentFail()))
 }
@@ -471,11 +475,13 @@ function finish(action: number) {
   if (!S.queue.length) { idler(); return } route()
 }
 export function showSentTest() {
-  S.stage = 4; $('stage-lbl')!.textContent = 'sentence review — how do you say it?'
+  S.stage = 4
   const m = S.cur!.sMean || S.cur!.sHz
+  if (voice()) { $('stage-lbl')!.textContent = '🎙 voice — sentence review'; fbClear()
+    return voiceTest(m, () => { gradeSent(2); sentRevealDone() }, () => { gradeSent(0); showSentFail() }, { suspend: suspendCur, pause: pauseSess, sent: true }) }
+  $('stage-lbl')!.textContent = 'sentence review — how do you say it?'
   setPrompt(qHtml(m) + `<div class="hint">hanzi reveals after you answer.</div>`)
   fbClear()
-  if (voice()) return voiceTest(m, () => { gradeSent(2); sentRevealDone() }, () => { gradeSent(0); showSentFail() }, { suspend: suspendCur, pause: pauseSess, sent: true })
   if (!S.settings!.noautoplay) playSent(S.cur!)
   setActions(btn('🔊 Replay', undefined, () => playSent(S.cur!), 'space'),
     btn('✅ I know it', 'g-good', () => { gradeSent(2); sentRevealDone() }, 'enter'),
@@ -514,12 +520,14 @@ function showWordCard(m: Note, back?: () => void) {
     btn('← Back', 'primary', back, 'enter'))
 }
 export function showSentRetest() {
-  S.stage = 7; $('stage-lbl')!.textContent = 'sentence — try again'
-  setPrompt(`<div class="hint">one more time — how do you say:</div>
-    <div class="meaning" style="font-size:27px;color:#e8edf3">${esc(S.cur!.sMean || S.cur!.sHz)}</div>`)
-  fbClear()
+  S.stage = 7
   const m = S.cur!.sMean || S.cur!.sHz
-  if (voice()) return voiceTest(m, () => { gradeSent(1); sentRevealDone() }, () => { gradeSent(0); showSentFail() }, { suspend: suspendCur, pause: pauseSess, sent: true })
+  if (voice()) { $('stage-lbl')!.textContent = '🎙 voice — one more time'; fbClear()
+    return voiceTest(m, () => { gradeSent(1); sentRevealDone() }, () => { gradeSent(0); showSentFail() }, { suspend: suspendCur, pause: pauseSess, sent: true }) }
+  $('stage-lbl')!.textContent = 'sentence — try again'
+  setPrompt(`<div class="hint">one more time — how do you say:</div>
+    <div class="meaning" style="font-size:27px;color:#e8edf3">${esc(m)}</div>`)
+  fbClear()
   setActions(btn('✅ I said it', 'g-next', () => { gradeSent(1); sentRevealDone() }, 'enter'),
     btn('👀 Show me', 'g-hard', () => showSentR()),
     btn('❌ Still no', 'g-again', () => { gradeSent(0); showSentFail() }))
