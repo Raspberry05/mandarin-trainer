@@ -10,8 +10,9 @@ export async function POST(req: NextRequest) {
     if (!audio || audio.size < 1200) return new Response('no audio', { status: 400 })
     if (audio.size > 20 * 1024 * 1024) return new Response('audio too large', { status: 400 })
     const form = new FormData()
-    form.append('file', audio, 'audio.webm')
+    form.append('file', audio, audio.type?.includes('mp3') ? 'audio.mp3' : 'audio.webm')
     form.append('model_id', 'scribe_v1')
+    form.append('language_code', 'cmn') // Mandarin practice — pin the language, auto-detect misfires on short clips
     const r = await fetch('https://api.elevenlabs.io/v1/speech-to-text', { method: 'POST', headers: { 'xi-api-key': key }, body: form })
     if (!r.ok) return new Response('upstream ' + r.status + ': ' + (await r.text()).slice(0, 200), { status: 502 })
     const j = await r.json()
