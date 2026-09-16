@@ -111,22 +111,22 @@ function voice() { return S.settings!.mode === 'voice' }
 let micToken = 0
 function voiceTest(target: string, pass: () => void, fail: () => void) {
   const tok = ++micToken
-  const meaning = target
-  const sayQ = (cb?: () => void) => speak(`Do you know how to say ${meaning} in Mandarin?`, 'en', cb)
-  /* auracle-style voice commands: pass / suspend / pause / again */
+  const isSent = S.stage === 4 || S.stage === 5 || S.stage === 6
+  const sayAnswer = () => { const n = S.cur!; if (isSent) playSent(n); else playAudio(n) }
+  const sayQ = (cb?: () => void) => speak(`Do you know how to say ${target} in Mandarin?`, 'en', cb)
   let cmdH: ListenHandle | null = null
   const stopCmd = () => { cmdH?.stop(); cmdH = null }
   const stopCmdAll = () => { stopCmd(); micToken = tok + 1 } // hard exit: voiceTest becomes a no-op
+  let tries = 0, echo = false
   function onCommand(c: Cmd) {
     if (tok !== micToken) return
-    if (c === 'again') { stopCmd(); line.textContent = '🔁 repeating the question…'; sayQ(() => { arm(); cmdLoop() }); return }
-    if (c === 'pass') { stopCmdAll(); line.textContent = '➡️ passed — showing the answer'; fail(); return }
+    if (c === 'again') { stopCmd(); line.textContent = '🔁 repeating the question…'; sayQ(() => { if (tok === micToken) listenOnce() }); return }
+    if (c === 'pass') { stopCmdAll(); auraclePass(); return }
     if (c === 'suspend') { stopCmdAll(); suspendCur(); return }
     if (c === 'pause') { stopCmdAll(); pauseSess(); return } }
   const cmdLoop = () => { if (tok !== micToken || !srSupported()) return
     setTimeout(() => { if (tok !== micToken) return
       cmdH = listenCmd(onCommand, () => cmdLoop()) }, 300) }
-  const passX = () => { stopCmdAll(); pass() }
   const failX = () => { stopCmdAll(); fail() }
   if (!srSupported()) {
     $('prompt')!.innerHTML += '<div class="hint" style="color:var(--warn)">⚠ mic not supported in this browser — flashcard fallback (Chrome/Edge recommended)</div>'
@@ -145,31 +145,53 @@ function voiceTest(target: string, pass: () => void, fail: () => void) {
   $('prompt')!.innerHTML += '<div id="mic-line" class="hint" style="font-size:19px;min-height:28px"></div><div id="mic-ctl" class="btnrow"></div>' + upNext()
   const line = $('mic-line')!, ctl = $('mic-ctl')!
   const replay = btn('🔊 Replay question', undefined, () => { sayQ() })
-  const skip = btn('Skip — show answer', 'g-hard', failX)
   const arm = () => { if (tok !== micToken) return
     ctl.innerHTML = ''; line.textContent = '🎙 tap Speak now · or say: “pass” · “suspend” · “pause” · “again”'
-    ctl.appendChild(btn('🎙 Speak now', 'primary', run)); ctl.appendChild(replay); ctl.appendChild(skip) }
-  const run = () => { if (tok !== micToken) return
+    ctl.appendChild(btn('🎙 Speak now', 'primary', listenOnce)); ctl.appendChild(replay)
+    ctl.appendChild(btn('Pass — show answer', 'g-hard', auraclePass)) }
+  const listenOnce = () => { if (tok !== micToken) return
     stopCmd()
-    try { speechSynthesis.cancel() } catch (e) {}
-    line.textContent = '🎙 listening… speak now'; ctl.innerHTML = ''
-    ctl.appendChild(btn('■ Stop', 'g-again', () => { h?.stop(); arm(); cmdLoop() }))
+    line.textContent = echo ? '🎙 echo it — say the answer out loud' : '🎙 listening… say it in Mandarin'
+    ctl.innerHTML = ''; ctl.appendChild(btn('⏸ Pause', 'g-again', () => { h?.stop(); pauseSess() }))
     let h: ListenHandle | null = null
     h = listenZh(
       t => { if (tok === micToken) line.textContent = '🎙 ' + t },
       t => { if (tok !== micToken) return
         const sim = similarity(t, target)
-        if (sim >= PASS) { line.innerHTML = `✅ heard: “${esc(t)}” <span class="hint">(${Math.round(sim * 100)}% match)</span>`
-          ctl.innerHTML = ''
-          stopCmdAll()
-          setTimeout(() => { if (tok === micToken) pass() }, 1100) }
-        else { line.innerHTML = `❌ heard: “${esc(t)}” <span class="hint">(${Math.round(sim * 100)}% match — doesn't match the target)</span>`
-          ctl.innerHTML = ''
-          ctl.appendChild(btn('🎙 Try again', 'primary', run)); ctl.appendChild(replay); ctl.appendChild(skip); cmdLoop() } },
+        if (sim >= PASS) {
+          if (echo) { // auracle: they needed the answer first — grade Again, show the reveal
+            line.innerHTML = `✅ echoed: “${esc(t)}” <span class="hint">— graded Again so it comes back soon</span>`
+            stopCmdAll(); setTimeout(() => { if (tok === micToken) fail() }, 1300) }
+          else { line.innerHTML = `✅ heard: “${esc(t)}” <span class="hint">(${Math.round(sim * 100)}% match)</span>`
+            ctl.innerHTML = ''; stopCmdAll(); setTimeout(() => { if (tok === micToken) pass() }, 1100) } }
+        else reAttempt(t, sim) },
       e => { if (tok !== micToken) return
         line.textContent = '⚠ ' + e; arm(); cmdLoop() })
   }
-  sayQ(() => { if (tok === micToken) run() }) // auto-listen after the question is spoken
+  const reAttempt = (heard?: string, sim = 0) => {
+    if (tok !== micToken) return
+    tries++
+    if (heard != null) line.innerHTML = `❌ heard: “${esc(heard)}” <span class="hint">(${Math.round(sim * 100)}% match)</span>`
+    ctl.innerHTML = ''
+    if (tries >= 3) { // gave up — show answer, reset like auracle's "pass please"
+      line.innerHTML += `<div class="hint">moving on — it comes back soon</div>`
+      stopCmdAll(); setTimeout(() => { if (tok === micToken) fail() }, 1400); return }
+    const label = echo ? 'one more echo…' : `not quite — asking again (${tries}/2)…`
+    line.innerHTML += `<div class="hint">${label}</div>`
+    setTimeout(() => { if (tok !== micToken) return
+      sayQ(() => { if (tok === micToken) listenOnce() }) }, echo ? 900 : 1500)
+  }
+  const auraclePass = () => { // "pass please": AI speaks the answer, then re-asks until you echo it correctly
+    if (tok !== micToken) return
+    tries = 0; echo = true
+    try { speechSynthesis.cancel() } catch (e) {}
+    line.textContent = '🔊 the answer — listen, then say it back'
+    ctl.innerHTML = ''
+    sayAnswer()
+    setTimeout(() => { if (tok !== micToken) return
+      sayQ(() => { if (tok === micToken) listenOnce() }) }, 2800)
+  }
+  sayQ(() => { if (tok === micToken) listenOnce() }) // auto-listen after the question is spoken
   arm(); cmdLoop()
 }
 

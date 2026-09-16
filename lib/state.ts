@@ -13,7 +13,7 @@ export interface Settings {
   newday: number; maxrev: number; steps: string; relearn: string; leech: number; leechact: string
   noautoplay: boolean; waitaudio: boolean; maxsec: number; newsrt: string; revsrt: string
   newafter: boolean; ret: number; maxivl: number
-  mode?: 'silent' | 'voice'; ttspref?: 'auto' | 'local' | 'google' | 'eleven'
+  mode?: 'silent' | 'voice'; ttspref?: 'auto' | 'local' | 'google' | 'eleven' | 'openai'
   elevenKey?: string; elevenVoice?: string; openaiKey?: string
 }
 export type QItem = Note | { sentNote: Note }
@@ -23,9 +23,9 @@ export const LS = { p: 'ast_progress', s: 'ast_settings', pr: 'ast_presets', c: 
 export const load = (k: string, d: any) => { try { return JSON.parse(localStorage.getItem(k) as any) ?? d } catch (e) { return d } }
 export const save = (k: string, v: unknown) => localStorage.setItem(k, JSON.stringify(v))
 
-export const DEF: Settings = { newday: 9999, maxrev: 9999, steps: '5s 50s 2m', relearn: '5s 50s 2m', leech: 6, leechact: 'Suspend Card',
+export const DEF: Settings = { newday: 9999, maxrev: 9999, steps: '1m 5m 1d', relearn: '1m 5m 1d', leech: 6, leechact: 'Suspend Card',
   noautoplay: false, waitaudio: false, maxsec: 60, newsrt: 'Random', revsrt: 'Due date, then random', newafter: true, ret: 90, maxivl: 36500,
-  mode: 'voice' as 'silent' | 'voice', ttspref: 'auto' as 'auto' | 'local' | 'google' | 'eleven' }
+  mode: 'voice' as 'silent' | 'voice', ttspref: 'auto' as 'auto' | 'local' | 'google' | 'eleven' | 'openai' }
 
 /* ---------- global mutable state ---------- */
 export const S = {
@@ -56,13 +56,16 @@ export const S = {
   sentSeen: new Set<string>(),
   pqItems: [] as Note[],
   pqIdx: 0,
-  BUILD_DATE: 1789538955,
+  BUILD_DATE: 1789539469,
 }
 if (!S.settings) { S.settings = { ...DEF }; S.presets = { 'Default': { ...DEF } as Settings }; save(LS.pr, S.presets); save(LS.s, S.settings) }
 if (!S.settings!.mode) S.settings!.mode = 'silent'
 if (!S.settings!.ttspref) S.settings!.ttspref = 'auto'
 if (!S.settings!.elevenVoice) S.settings!.elevenVoice = 'JBFqnCBsd6RMkjVDRZzb'
 if (!localStorage.getItem('ast_modeflip')) { S.settings!.mode = 'voice'; localStorage.setItem('ast_modeflip', '1') }
+/* auracle learn sequence: one user who never touched old default gets 1m 5m 1d (3 recalls → graduate next day) */
+if (S.settings!.steps === '5s 50s 2m') S.settings!.steps = '1m 5m 1d'
+if (S.settings!.relearn === '5s 50s 2m') S.settings!.relearn = '1m 5m 1d'
 if (typeof S.counts.n === 'number' || typeof S.counts.r === 'number') S.counts = { d: S.counts.d, n: {}, r: {} }
 
 export const $ = (id: string) => document.getElementById(id)!

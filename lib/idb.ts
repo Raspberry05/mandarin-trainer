@@ -5,14 +5,26 @@ import { S } from './state'
 let idbP: Promise<IDBDatabase> | null = null
 function idb() {
   if (!idbP) idbP = new Promise((res, rej) => {
-    const r = indexedDB.open('ast-store', 1)
+    const r = indexedDB.open('ast-store', 2)
     r.onupgradeneeded = () => { const d = r.result
       if (!d.objectStoreNames.contains('notes')) d.createObjectStore('notes')
-      if (!d.objectStoreNames.contains('media')) d.createObjectStore('media') }
+      if (!d.objectStoreNames.contains('media')) d.createObjectStore('media')
+      if (!d.objectStoreNames.contains('tts')) d.createObjectStore('tts') }
     r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error)
   })
   return idbP
 }
+/* TTS audio cache: persist premium AI voices so free credits aren't re-burned */
+export async function getTts(k: string): Promise<Blob | null> { try {
+  const db = await idb()
+  return await new Promise(res => { const r = db.transaction('tts', 'readonly').objectStore('tts').get(k)
+    r.onsuccess = () => res((r.result as Blob) || null); r.onerror = () => res(null) })
+} catch (e) { return null } }
+export async function putTts(k: string, blob: Blob) { try {
+  const db = await idb()
+  await new Promise((res, rej) => { const t = db.transaction('tts', 'readwrite'); t.objectStore('tts').put(blob, k)
+    t.oncomplete = () => res(null); t.onerror = () => rej(t.error) })
+} catch (e) {} }
 export async function saveAll() { try {
   if (typeof navigator !== 'undefined' && navigator.storage && navigator.storage.persist) navigator.storage.persist()
   const db = await idb()

@@ -1,5 +1,6 @@
 "use strict"
 import { S, esc, Note } from './state'
+import { getTts, putTts } from './idb'
 
 /* ---------- TTS & audio ---------- */
 export function pickVoice() {
@@ -15,51 +16,58 @@ export function pickEnVoice() {
 }
 function ttsLocal(text: string, lang: string, rate: number, onend?: () => void) {
   if (!('speechSynthesis' in window) || !text) { onend?.(); return }
-  speechSynthesis.cancel()
-  const u = new SpeechSynthesisUtterance(text)
-  u.lang = lang; u.rate = rate
-  const v = lang.startsWith('zh') ? pickVoice() : pickEnVoice(); if (v) u.voice = v
-  if (onend) u.onend = () => onend()
-  speechSynthesis.speak(u)
-  if (onend) setTimeout(onend, 9000) // safety: onend never fires in some browsers
+  try { speechSynthesis.cancel() } catch (e) {}
+  let done = false
+  const fin = () => { if (done) return; done = true; onend?.() }
+  setTimeout(() => { // Chrome drops the utterance if speak() follows cancel() in the same tick
+    const u = new SpeechSynthesisUtterance(text)
+    u.lang = lang; u.rate = rate
+    const v = lang.startsWith('zh') ? pickVoice() : pickEnVoice(); if (v) u.voice = v
+    u.onend = () => fin()
+    speechSynthesis.speak(u)
+    setTimeout(fin, 9000) // safety: onend never fires in some browsers
+  }, 80)
 }
 const gCache = new Map<string, string>()
-/* ElevenLabs: best AI voices — needs the user's API key + voice id in settings */
+/* keys: settings first, then build-time env (Vercel: NEXT_PUBLIC_ELEVENLABS_API_KEY / NEXT_PUBLIC_OPENAI_API_KEY) */
+const EL_KEY = () => S.settings?.elevenKey || (typeof process !== 'undefined' && (process as any).env?.NEXT_PUBLIC_ELEVENLABS_API_KEY) || ''
+const OAI_KEY = () => S.settings?.openaiKey || (typeof process !== 'undefined' && (process as any).env?.NEXT_PUBLIC_OPENAI_API_KEY) || ''
+/* premium AI voices: persistent cache (IndexedDB) + in-flight dedupe — each unique phrase is synthesized exactly once, ever */
 const eCache = new Map<string, string>()
-/* OpenAI gpt-4o-mini-tts: very fluent, steerable; needs the user's API key in settings */
 const oCache = new Map<string, string>()
-async function openaiUrl(text: string, lang: string): Promise<string | null> {
-  const key = S.settings?.openaiKey || ''
-  if (!key) return null
-  const k = 'o|' + lang + '|' + text
-  let u = oCache.get(k)
-  if (u) return u
-  try {
-    const r = await fetch('https://api.openai.com/v1/audio/speech',
-      { method: 'POST', headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'gpt-4o-mini-tts', voice: 'coral', input: text, response_format: 'mp3',
-          instructions: lang.startsWith('zh') ? 'Speak warm, clear native Mandarin, moderate pace.' : 'Speak warmly, like a friendly tutor.' }) })
-    if (!r.ok) return null
-    const b = await r.blob()
-    u = URL.createObjectURL(b); oCache.set(k, u); return u
-  } catch (e) { return null }
+const inFlight = new Map<string, Promise<string | null>>()
+function fetchTtsCached(cache: Map<string, string>, k: string, url: string, init: RequestInit): Promise<string | null> {
+  const hit = cache.get(k); if (hit) return Promise.resolve(hit)
+  const live = inFlight.get(k); if (live) return live
+  const run = (async () => {
+    const idbHit = await getTts(k)
+    if (idbHit) { const u = URL.createObjectURL(idbHit); cache.set(k, u); return u }
+    try {
+      const r = await fetch(url, init)
+      if (!r.ok) return null
+      const b = await r.blob()
+      putTts(k, b)
+      const u = URL.createObjectURL(b); cache.set(k, u); return u
+    } catch (e) { return null }
+  })()
+  inFlight.set(k, run); run.finally(() => inFlight.delete(k))
+  return run
 }
 async function elevenUrl(text: string, lang: string): Promise<string | null> {
-  const key = S.settings?.elevenKey || ''
-  if (!key) return null
+  const key = EL_KEY(); if (!key) return null
   const voice = (S.settings?.elevenVoice || 'JBFqnCBsd6RMkjVDRZzb').trim()
-  const k = voice + '|' + lang + '|' + text
-  let u = eCache.get(k)
-  if (u) return u
-  try {
-    const model = lang.startsWith('zh') ? 'eleven_multilingual_v2' : 'eleven_flash_v2_5'
-    const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voice)}?output_format=mp3_44100_128`,
-      { method: 'POST', headers: { 'xi-api-key': key, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, model_id: model }) })
-    if (!r.ok) return null
-    const b = await r.blob()
-    u = URL.createObjectURL(b); eCache.set(k, u); return u
-  } catch (e) { return null }
+  const model = lang.startsWith('zh') ? 'eleven_multilingual_v2' : 'eleven_flash_v2_5'
+  return fetchTtsCached(eCache, 'e|' + voice + '|' + model + '|' + text,
+    `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voice)}?output_format=mp3_44100_128`,
+    { method: 'POST', headers: { 'xi-api-key': key, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, model_id: model }) })
+}
+async function openaiUrl(text: string, lang: string): Promise<string | null> {
+  const key = OAI_KEY(); if (!key) return null
+  return fetchTtsCached(oCache, 'o|coral|' + lang + '|' + text, 'https://api.openai.com/v1/audio/speech',
+    { method: 'POST', headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'gpt-4o-mini-tts', voice: 'coral', input: text, response_format: 'mp3',
+        instructions: lang.startsWith('zh') ? 'Speak warm, clear native Mandarin, moderate pace.' : 'Speak warmly, like a friendly tutor.' }) })
 }
 function gUrl(text: string, lang: string) {
   const k = lang + '|' + text
@@ -71,8 +79,12 @@ function gUrl(text: string, lang: string) {
 export function speak(text: string, lang = 'zh-CN', onend?: () => void) {
   if (!text) { onend?.(); return }
   const pref = S.settings?.ttspref || 'auto'
-  const elevenify = !!(S.settings?.elevenKey || S.settings?.openaiKey) && (pref === 'eleven' || pref === 'openai' || pref === 'auto')
-  if (elevenify) {
+  const zh = lang.startsWith('zh')
+  /* auto mode: premium engines only for Mandarin answers; the English question is fine on cheap engines.
+     explicit 'eleven'/'openai' pref = premium for everything. */
+  const wantEleven = !!EL_KEY() && (pref === 'eleven' || (pref === 'auto' && zh))
+  const wantOpenai = !!OAI_KEY() && (pref === 'openai' || (pref === 'auto' && !EL_KEY() && zh))
+  if (wantEleven || wantOpenai) {
     speakAsync(text, lang, onend); return
   }
   const v = lang.startsWith('zh') ? pickVoice() : pickEnVoice()
@@ -90,9 +102,11 @@ export function speak(text: string, lang = 'zh-CN', onend?: () => void) {
 }
 /* async engine path: ElevenLabs → OpenAI → local voice */
 function speakAsync(text: string, lang: string, onend?: () => void) {
+  let done = false
+  const fin = () => { if (done) return; done = true; onend?.() }
   elevenUrl(text, lang).then(u => u ? u : openaiUrl(text, lang)).then(u => {
-    if (u) { const a = new Audio(u); if (onend) a.onended = () => onend(); a.play().catch(() => ttsLocal(text, lang, 0.9, onend)) }
-    else ttsLocal(text, lang, lang.startsWith('zh') ? 0.9 : 1, onend)
+    if (u) { const a = new Audio(u); if (onend) a.onended = () => fin(); a.play().catch(() => ttsLocal(text, lang, 0.9, fin)) }
+    else ttsLocal(text, lang, lang.startsWith('zh') ? 0.9 : 1, fin)
   })
 }
 export function tts(text: string, rate?: number) {
