@@ -4,7 +4,7 @@
 import { S, $, esc, type Note } from './state'
 import { playAudio, playSent, speak } from './audio'
 import { srSupported, listenZh, listenCmd, micMeter, recordUtterance, sttEleven, similarity, PASS, type ListenHandle, type MeterHandle, type Cmd } from './speech'
-import { btn, setActions, promptAppend } from './dom'
+import { btn, setActions, promptAppend, promptSet } from './dom'
 
 let micToken = 0
 let vKill: (() => void) | null = null
@@ -68,10 +68,12 @@ export function voiceTest(target: string, pass: () => void, fail: () => void, io
     setTimeout(() => { if (g !== cmdGen || tok !== micToken) return
       cmdH = listenCmd(onCommand, () => cmdLoop()) }, 300) }
   if (!srSupported()) {
+    promptSet('') // clear any leftover view content — duplicate ids make the live buttons/wires stale
     promptAppend('<div class="hint" style="color:var(--warn)">⚠ mic not supported in this browser — flashcard fallback (Chrome/Edge recommended)</div>')
     setActions(btn('✅ I know it', 'g-next', pass, 'enter'), btn('❌ I don\'t know it', 'g-again', fail))
     return
   }
+  promptSet('') // clear leftover view content first — duplicated ids (cmd-row/mic-bar) would wire stale dead nodes
   promptAppend(`<div id="att-list"></div>
     <div id="q-card"><span class="qz">${esc(qText)}</span><span class="qint">${fmtIvl()}</span></div>
     ${rv ? `<div id="reveal-card" style="display:none"><span class="rlbl">correct answer</span><span class="rhz">${esc(rv.hz)}</span><span class="rpy">${esc(rv.py)}</span></div>` : ''}
