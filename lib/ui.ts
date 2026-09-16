@@ -281,15 +281,25 @@ function pqDone() {
 }
 
 /* ---------- home / deck grid ---------- */
+/* deck cover: same gradient-thumbnail language as the HSK level cards (cebdf76 style) */
+function deckArt(e1: string, e2: string, g: [string, string], key: string, badge: string): string {
+  return `<div class="deckcover"><svg viewBox="0 0 200 84" preserveAspectRatio="xMidYMid slice" role="img" aria-label="${badge} cover">
+    <defs><linearGradient id="dcg${key}" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="${g[0]}"/><stop offset="1" stop-color="${g[1]}"/></linearGradient></defs>
+    <rect width="200" height="84" fill="url(#dcg${key})"/>
+    <circle cx="174" cy="12" r="32" fill="rgba(255,255,255,.14)"/>
+    <circle cx="14" cy="80" r="26" fill="rgba(0,0,0,.16)"/>
+    <text class="lem1" x="22" y="56" font-size="34">${e1}</text>
+    <text class="lem2" x="142" y="32" font-size="19">${e2}</text>
+    <text x="12" y="78" font-size="11" font-weight="900" fill="rgba(255,255,255,.92)" font-family="Nunito,sans-serif">${esc(badge)}</text>
+  </svg></div>`
+}
 export function renderHome() {
   const ids = [...new Set(S.notes.map(n => n.deckId))]
   const g = $('deck-grid')!
   g.innerHTML = ''
   if (!ids.length) { g.innerHTML = '<div class="hint" style="text-align:center;width:100%">No decks yet — import an .apkg above, or drop it here.</div>'; return }
   rollCounts()
-  const FLAG: Record<string, string> = {
-    zh: '<div class="flagbar"><svg viewBox="0 0 30 20" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice"><rect width="30" height="20" fill="#de2910"/><text x="2.5" y="7.2" font-size="5.6" fill="#ffde00">★</text><text x="10" y="3.6" font-size="2.6" fill="#ffde00">★</text><text x="11.8" y="5.8" font-size="2.6" fill="#ffde00">★</text><text x="11.8" y="8.9" font-size="2.6" fill="#ffde00">★</text><text x="10" y="11" font-size="2.6" fill="#ffde00">★</text></svg></div>',
-    es: '<div class="flagbar"><svg viewBox="0 0 30 20" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice"><rect width="30" height="20" fill="#c60b1e"/><rect y="5" width="30" height="10" fill="#ffc400"/></svg></div>' }
   for (const d of ids) {
     const ns = S.notes.filter(n => n.deckId === d)
     const first = ns[0] || ({} as Partial<Note>)
@@ -304,7 +314,10 @@ export function renderHome() {
     const lang = first.lang === 'zh' ? '<span class="langtag">Mandarin · Simplified</span>' : ''
     const card = document.createElement('div'); card.className = 'deckcard'
     const bundled = String(d) === 'mz'
-    card.innerHTML = `${FLAG[first.lang || ''] || ''}<h3>${name} ${lang}</h3>
+    const cover = bundled ? deckArt('🀄', '🐉', ['#f43f5e', '#b91c1c'], 'zh', 'MANDARIN · SIMPLIFIED')
+      : first.lang === 'es' ? deckArt('💃', '🥘', ['#f59e0b', '#ea580c'], 'es', 'SPANISH')
+      : deckArt('📦', '🗂️', ['#1cb0f6', '#a560ff'], 'x', 'YOUR DECK')
+    card.innerHTML = `${cover}<h3>${name} ${lang}</h3>
       <div class="dmeta">${ns.length} cards · <b>${newC}</b> new · ${learnC} learning · <b>${revC}</b> reviewing${doneC ? ` · ${doneC} done` : ''}<br>
       ${dueC ? `<b>${dueC} ready now</b> · ` : ''}${sentC} sentence(s) unlocked</div>${desc}
       <div class="dbtns"><button class="dreset" data-r="${esc(String(d))}">${I.reset()} reset</button>
@@ -315,7 +328,7 @@ export function renderHome() {
     g.appendChild(card)
   }
   const soon = document.createElement('div'); soon.className = 'deckcard soon'
-  soon.innerHTML = `${FLAG.es}<h3>Spanish</h3><div class="dmeta">Curriculum in preparation — coming soon.</div>`
+  soon.innerHTML = `${deckArt('💃', '🥘', ['#f59e0b', '#ea580c'], 'es', 'SPANISH · SOON')}<h3>Spanish</h3><div class="dmeta">Curriculum in preparation — coming soon.</div>`
   g.appendChild(soon)
   g.querySelectorAll('.dreset').forEach(b => (b as HTMLElement).onclick = e => {
     e.stopPropagation(); resetDeck((b as HTMLElement).dataset.r!) })
