@@ -60,7 +60,8 @@ export function voiceTest(target: string, pass: () => void, fail: () => void, io
   function onCommand(c: Cmd) {
     if (tok !== micToken) return
     if (c === 'again') { stopCmd(); line.textContent = '🔁 repeating the question…'; sayQ(() => { if (tok === micToken) listenOnce() }); return }
-    if (c === 'pass') { stopCmdAll(); auraclePass(); return }
+    if (c === 'pass') { // auracle: keep the mic loop alive — pass just reveals the answer and re-asks for the echo
+      stopCmd(); auraclePass(); return }
     if (c === 'suspend') { stopCmdAll(); io.suspend(); return }
     if (c === 'pause') { stopCmdAll(); io.pause(); return } }
   const cmdLoop = () => { if (tok !== micToken || !srSupported()) return
