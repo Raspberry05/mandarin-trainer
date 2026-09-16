@@ -4,7 +4,7 @@
 import { S, $, esc, type Note } from './state'
 import { playAudio, playSent, speak } from './audio'
 import { srSupported, listenZh, listenCmd, micMeter, recordUtterance, sttEleven, similarity, parseCommand, PASS, type ListenHandle, type MeterHandle, type Cmd } from './speech'
-import { btn, setActions, promptAppend, promptSet } from './dom'
+import { btn, setActions, promptAppend, promptSet, I } from './dom'
 
 let micToken = 0
 let vKill: (() => void) | null = null
@@ -42,11 +42,14 @@ export function voiceTest(target: string, pass: () => void, fail: () => void, io
   let cmdGen = 0 // bumping kills any queued cmdLoop re-arm — no dual-listener mic contention
   const stopCmd = () => { cmdH?.stop(); cmdH = null; cmdGen++ }
   const stopCmdAll = () => { stopCmd(); meterH?.stop(); meterH = null; micToken = tok + 1; vKill = null } // hard exit: voiceTest becomes a no-op
+  const setMicState = (txt: string, ok: boolean) => { const ms = $('mic-state'); if (!ms) return
+    ms.classList.toggle('ok', ok)
+    ms.innerHTML = `${I.mic(ok ? '#00e676' : '#ffb84d')}<span>${esc(txt)}</span>` }
   const startMeter = () => { if (meterH) return
-    const ms = $('mic-state'); if (ms) ms.textContent = 'mic connecting…'
+    setMicState('mic connecting…', false)
     micMeter(lvl => { const b = $('mic-bar'); if (b) b.style.width = Math.max(2, Math.min(100, lvl * 130)) + '%' })
-      .then(h => { meterH = h; if (h) { if (ms) { ms.classList.add('ok'); ms.textContent = '🎙 listening · mic connected' } }
-        else { ($('mic-bar-wrap') as HTMLElement).style.opacity = '.35'; if (ms) { ms.classList.remove('ok'); ms.textContent = '⚠ mic blocked — allow microphone access' } } }) }
+      .then(h => { meterH = h; if (h) setMicState('listening · mic connected', true)
+        else { ($('mic-bar-wrap') as HTMLElement).style.opacity = '.35'; setMicState('mic blocked — allow microphone access', false) } }) }
   let tries = 0, echo = false, noSpeechStreak = 0
   // ASR engine: browser Web Speech first; after 2 consecutive no-speech (or setting asr=eleven) use ElevenLabs Scribe
   const useEleven = () => S.settings?.asr === 'eleven' || (S.settings?.asr !== 'browser' && noSpeechStreak >= 2)
@@ -71,7 +74,7 @@ export function voiceTest(target: string, pass: () => void, fail: () => void, io
   if (!srSupported()) {
     promptSet('') // clear any leftover view content — duplicate ids make the live buttons/wires stale
     promptAppend('<div class="hint" style="color:var(--warn)">⚠ mic not supported in this browser — flashcard fallback (Chrome/Edge recommended)</div>')
-    setActions(btn('✅ I know it', 'g-next', pass, 'enter'), btn('❌ I don\'t know it', 'g-again', fail))
+    setActions(btn(I.check() + ' I know it', 'g-next', pass, 'enter'), btn(I.x() + " I don't know it", 'g-again', fail))
     return
   }
   promptSet('') // clear leftover view content first — duplicated ids (cmd-row/mic-bar) would wire stale dead nodes
@@ -88,6 +91,7 @@ export function voiceTest(target: string, pass: () => void, fail: () => void, io
     <div id="mic-ctl" class="btnrow"></div>`)
   const line = $('mic-line')!, ctl = $('mic-ctl')!
   const ms = $('mic-state'); if (ms) ms.classList.remove('ok')
+  setMicState('connecting…', false)
   startMeter()
   const arm = () => { if (tok !== micToken) return
     ctl.innerHTML = ''; line.textContent = echo ? '🎙 echo it — say the answer out loud' : '🎙 listening… say it in Mandarin' }

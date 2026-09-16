@@ -9,19 +9,22 @@ export default function Page() {
     <>
       <div id="boot"><div className="spin"></div><div className="hint">loading libraries (sql.js, jszip, zstd)…</div></div>
       <header>
-        <h1>Language Trainer</h1>
+        <h1><span className="logo-ic"><svg width="25" height="25" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="13" rx="5.5" stroke="#00c2ff" strokeWidth="2.3"/><rect className="eq" x="8.4" y="9.4" width="2.1" height="4.2" rx="1" fill="#00e676"/><rect className="eq" x="11.6" y="7.8" width="2.1" height="7.4" rx="1" fill="#b249ff"/><rect className="eq" x="14.8" y="9.4" width="2.1" height="4.2" rx="1" fill="#ff4b8b"/></svg></span>Language Trainer</h1>
         <button id="back-btn" style={{display:'none'}}>‹ Home</button>
         <input type="file" id="file-in" accept=".apkg,.colpkg,.txt,.csv" multiple hidden />
-        <button id="settings-btn">⚙ Settings</button>
-        <button id="reset-card-btn" title="Erase ALL progress for this deck and start over">♻ Reset deck</button>
+        <button id="settings-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v3M12 18.2v3M2.8 12h3M18.2 12h3M5.5 5.5l2.1 2.1M16.4 16.4l2.1 2.1M18.5 5.5l-2.1 2.1M7.6 16.4l-2.1 2.1"/></svg>Settings</button>
+        <button id="reset-card-btn" title="Erase ALL progress for this deck and start over"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ffb300" strokeWidth="2.4" strokeLinecap="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5" strokeLinejoin="round"/></svg>Reset deck</button>
         <button id="mode-btn" style={{display:'none'}}>mode</button>
-        <button id="auth-btn">👤 Sign in / Sign up</button>
+        <button id="auth-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c1.5-3.5 4.5-5 8-5s6.5 1.5 8 5"/></svg>Sign in / Sign up</button>
       </header>
       <main>
         <div id="home-view">
           <div id="diag" style={{fontSize:'11.5px',color:'var(--dim)',margin:'0 0 8px',fontFamily:'monospace'}}>booting…</div>
-          <div className="hero"><p className="hint" style={{fontSize:'15px'}}>Sentence-first Anki-style lessons. Pick a curriculum below, or import your own deck.</p></div>
-          <div id="home-drop">📦 drop .apkg / .txt here — or <button id="import-btn" className="primary">⬆ Import decks</button></div>
+          <div className="hero">
+            <h2><span className="hero-ic"><svg width="30" height="30" viewBox="0 0 24 24" fill="none"><circle className="ring" cx="12" cy="12" r="9" stroke="#00c2ff" strokeWidth="2.4"/><circle className="ring" cx="12" cy="12" r="4.5" stroke="#b249ff" strokeWidth="2.4" style={{animationDirection:'reverse'}}/><circle className="dot" cx="12" cy="12" r="1.8" fill="#ff4b8b"/></svg></span>Speak your way to fluency</h2>
+            <p className="hint" style={{fontSize:'15px'}}>Sentence-first Anki-style lessons. Pick a curriculum below, or import your own deck.</p>
+          </div>
+          <div id="home-drop"><span className="drop-ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#00c2ff" strokeWidth="2"><path d="M12 3 3.5 7.2v9.6L12 21l8.5-4.2V7.2z" fill="rgba(0,194,255,.08)"/><path d="M3.5 7.2 12 11.5l8.5-4.3M12 11.5v9.3"/></svg></span>drop .apkg / .txt here — or <button id="import-btn" className="primary"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V6M6 12l6-6 6 6"/></svg>Import decks</button></div>
           <div id="import-status" className="hint"></div>
           <div id="deck-page" style={{ display: 'none' }}></div>
           <div id="deck-grid"></div>
@@ -32,9 +35,9 @@ export default function Page() {
             <div id="top-prog"><div id="top-fill-track"><div id="top-fill"></div></div><span id="top-pct"></span></div>
             <div id="top-chips"></div>
             <div id="mode-pills">
-              <button id="mp-silent" className="pill">🗂 Flashcard</button>
-              <button id="mp-voice" className="pill">🎙 Voice</button>
-              <button id="mp-chat" className="pill">💬 Conversational</button>
+              <button id="mp-silent" className="pill"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#00c2ff" strokeWidth="2.2"><rect x="3" y="6" width="13" height="13" rx="3"/><path d="M7.5 3h11a2.5 2.5 0 0 1 2.5 2.5v10.5" strokeLinecap="round"/></svg>Flashcard</button>
+              <button id="mp-voice" className="pill"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#00c2ff" strokeWidth="2.2" strokeLinecap="round"><rect x="9" y="2.5" width="6" height="11" rx="3" fill="#00c2ff" stroke="none"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></svg>Voice</button>
+              <button id="mp-chat" className="pill"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#b249ff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H9l-5 4.5z"/></svg>Conversational</button>
             </div>
           </div>
           <div className="stats">

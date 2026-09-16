@@ -9,6 +9,7 @@ import { importApkg, importTsv } from './anki'
 import { removeDeck, resetDeck } from './decks'
 import { sb, sbPull, sbInit, sbBtnLabel } from './sync'
 import { SB_URL, SB_KEY } from './config'
+import { btn, setActions, promptAppend, promptSet, I } from './dom'
 
 /* ---------- stats ---------- */
 export function statsView() {
@@ -28,16 +29,24 @@ export function statsView() {
   renderRail()
 }
 
+/* ---------- inline SVG icon set (animated via globals.css keyframes) — now in dom.ts as I ---------- */
 /* ---------- HSK level cover art + descriptions (inline SVG scenes, no assets) ---------- */
-const LVL_SCENES: Record<number, { e1: string; e2: string; g: [string, string]; title: string; desc: string }> = {
-  1: { e1: '🐼', e2: '🎋', g: ['#2dd4bf', '#0d9488'], title: 'First Steps', desc: 'Greetings, numbers, family, food and simple asks — the ~150 words that start everyday Mandarin.' },
-  2: { e1: '🏮', e2: '🧧', g: ['#f97316', '#dc2626'], title: 'Simple Chats', desc: 'Shopping, time, directions and weather — hold basic conversations with ~300 words.' },
-  3: { e1: '🐉', e2: '☁️', g: ['#a560ff', '#6d28d9'], title: 'Daily Life Flow', desc: 'Opinions, plans, stories and small talk — get around daily life with ~600 words.' },
-  4: { e1: '🌸', e2: '🏯', g: ['#f472b6', '#e11d48'], title: 'Ideas & Culture', desc: 'Work, culture and abstract topics — discuss ideas, not just things, with ~1,200 words.' },
-  5: { e1: '📺', e2: '🎙️', g: ['#1cb0f6', '#2563eb'], title: 'Fluent Discussion', desc: 'News, films, debates and interviews — follow real media with ~2,500 words.' },
-  6: { e1: '🖌️', e2: '🏞️', g: ['#ffc800', '#d97706'], title: 'Mastery & Nuance', desc: 'Literature, idioms and fine shades of meaning — the ~5,000-word summit.' },
+const LVL_SCENES: Record<number, { g: [string, string]; title: string; desc: string; ic: string }> = {
+  1: { g: ['#00d68f', '#00916e'], title: 'First Steps', desc: 'Greetings, numbers, family, food and simple asks — the ~150 words that start everyday Mandarin.',
+    ic: `<g class="ic-float"><circle cx="-13" cy="-13" r="7" fill="#26343f"/><circle cx="13" cy="-13" r="7" fill="#26343f"/><ellipse cx="0" cy="0" rx="15" ry="12.5" fill="#fff"/><ellipse cx="-6" cy="-2" rx="4.4" ry="5.4" fill="#26343f" transform="rotate(-18 -6 -2)"/><ellipse cx="6" cy="-2" rx="4.4" ry="5.4" fill="#26343f" transform="rotate(18 6 -2)"/><circle cx="-6" cy="-3" r="1.5" fill="#fff"/><circle cx="6" cy="-3" r="1.5" fill="#fff"/><ellipse cx="0" cy="4.6" rx="2.3" ry="1.7" fill="#26343f"/><path d="M-3 7.5 Q0 10.5 3 7.5" stroke="#26343f" stroke-width="1.6" fill="none" stroke-linecap="round"/></g>` },
+  2: { g: ['#ff9a3d', '#e02f5c'], title: 'Simple Chats', desc: 'Shopping, time, directions and weather — hold basic conversations with ~300 words.',
+    ic: `<g class="ic-sway"><rect x="-6.5" y="-20" width="13" height="4" rx="1.5" fill="#ffb300"/><ellipse cx="0" cy="-4" rx="13.5" ry="11.5" fill="#ff5a7a"/><ellipse cx="0" cy="-4" rx="13.5" ry="11.5" fill="none" stroke="#c2185b" stroke-width="1.4" opacity=".85"/><ellipse cx="0" cy="-4" rx="5.5" ry="11.5" fill="none" stroke="#c2185b" stroke-width="1.1" opacity=".85"/><ellipse cx="0" cy="-4" rx="10" ry="11.5" fill="none" stroke="#c2185b" stroke-width="1" opacity=".6"/><line x1="0" y1="7.5" x2="0" y2="14" stroke="#ffb300" stroke-width="2"/><circle cx="0" cy="16.5" r="2.4" fill="#ffb300"/></g>` },
+  3: { g: ['#b249ff', '#5b21b6'], title: 'Daily Life Flow', desc: 'Opinions, plans, stories and small talk — get around daily life with ~600 words.',
+    ic: `<g class="ic-wiggle"><path d="M-15 10 Q-7 -12 3 0 Q12 11 16 -4" stroke="#c68aff" stroke-width="7" fill="none" stroke-linecap="round"/><circle cx="17" cy="-6" r="7.5" fill="#b249ff"/><path d="M13 -12 L16 -19 L19.5 -12 Z" fill="#00e676"/><circle cx="18.5" cy="-7" r="2.1" fill="#fff"/><circle cx="19.2" cy="-7" r="1" fill="#10131f"/></g>` },
+  4: { g: ['#ff4b8b', '#c2185b'], title: 'Ideas & Culture', desc: 'Work, culture and abstract topics — discuss ideas, not just things, with ~1,200 words.',
+    ic: `<g class="ic-spin"><ellipse cx="0" cy="-8.5" rx="4.2" ry="9" fill="#ff7ab8"/><ellipse cx="0" cy="-8.5" rx="4.2" ry="9" fill="#ff7ab8" transform="rotate(72)"/><ellipse cx="0" cy="-8.5" rx="4.2" ry="9" fill="#ff7ab8" transform="rotate(144)"/><ellipse cx="0" cy="-8.5" rx="4.2" ry="9" fill="#ff7ab8" transform="rotate(216)"/><ellipse cx="0" cy="-8.5" rx="4.2" ry="9" fill="#ff7ab8" transform="rotate(288)"/><circle cx="0" cy="0" r="4.6" fill="#ffb300"/></g>` },
+  5: { g: ['#00c2ff', '#1e5fd0'], title: 'Fluent Discussion', desc: 'News, films, debates and interviews — follow real media with ~2,500 words.',
+    ic: `<g><rect x="-20" y="-13" width="40" height="27" rx="6.5" fill="#12274d" stroke="#00c2ff" stroke-width="2.2"/><path d="M-15 -4.5 L-7 0 L-15 4.5 Z" fill="#00c2ff" class="ic-pulse"/><rect x="2" y="-7" width="3.4" height="14" rx="1.7" fill="#00e676" class="ic-eq"/><rect x="8" y="-4" width="3.4" height="8" rx="1.7" fill="#00e676" class="ic-eq eq-b2"/><rect x="14" y="-9" width="3.4" height="18" rx="1.7" fill="#00e676" class="ic-eq eq-b3"/></g>` },
+  6: { g: ['#ffb300', '#c2410c'], title: 'Mastery & Nuance', desc: 'Literature, idioms and fine shades of meaning — the ~5,000-word summit.',
+    ic: `<g class="ic-wiggle"><rect x="-3.5" y="-20" width="7" height="24" rx="3" transform="rotate(24 0 -8)" fill="#ffb300"/><path d="M-2.5 2.5 L4.5 2.5 L1 14 Z" transform="rotate(24 0 -8)" fill="#26343f"/><circle cx="7" cy="17" r="3" fill="#b249ff" class="ic-pulse"/></g>` },
 }
-const ALL_SCENE = { e1: '📚', e2: '🧭', g: ['#1cb0f6', '#a560ff'] as [string, string] }
+const ALL_SCENE = { g: ['#00c2ff', '#b249ff'] as [string, string],
+  ic: `<g><rect x="-17" y="-13" width="22" height="9" rx="2.6" fill="#00c2ff" class="ic-bob"/><rect x="-12" y="-2.5" width="25" height="9" rx="2.6" fill="#b249ff" class="ic-bob" style="animation-delay:.25s"/><rect x="-15" y="8" width="20" height="9" rx="2.6" fill="#ff4b8b" class="ic-bob" style="animation-delay:.5s"/></g>` }
 function lvlArt(L: number | string, all = false): string {
   const s = all ? ALL_SCENE : LVL_SCENES[+L]
   if (!s) return ''
@@ -48,8 +57,7 @@ function lvlArt(L: number | string, all = false): string {
     <rect width="200" height="84" fill="url(#lg${key})"/>
     <circle cx="174" cy="12" r="32" fill="rgba(255,255,255,.14)"/>
     <circle cx="14" cy="80" r="26" fill="rgba(0,0,0,.16)"/>
-    <text x="22" y="56" font-size="34">${s.e1}</text>
-    <text x="142" y="32" font-size="19">${s.e2}</text>
+    <g transform="translate(58,44)">${s.ic}</g>
     <text x="12" y="78" font-size="11" font-weight="900" fill="rgba(255,255,255,.92)" font-family="Nunito,sans-serif">${all ? 'ALL LEVELS' : 'HSK ' + L}</text>
   </svg>`
 }
@@ -210,12 +218,7 @@ export function renderTop() {
   ;['silent', 'voice', 'chat'].forEach(k => { const p = $('mp-' + k); if (p) p.classList.toggle('on', m === k) })
 }
 
-/* ---------- prompt / actions helpers ---------- */
-function btn(label: string, cls?: string, fn?: () => void, key?: string) {
-  const b = document.createElement('button')
-  b.textContent = label; if (cls) b.className = cls; if (key) b.dataset.key = key; b.onclick = fn!; return b
-}
-export function setActions(...bs: (HTMLButtonElement | null)[]) { const a = $('actions')!; a.innerHTML = ''; bs.filter(Boolean).forEach(b => a.appendChild(b!)) }
+/* ---------- prompt / actions helpers (btn/setActions live in dom.ts) ---------- */
 function setPrompt(html: string) { $('prompt')!.innerHTML = html; renderTop() }
 function fbClear() { const f = $('feedback')!; f.textContent = ''; f.className = '' }
 function stopTimer() { clearInterval(S.timerInt); S.timerInt = null; $('timer')!.textContent = '' }
@@ -260,9 +263,9 @@ function pqShow() {
     <div class="hint">🔊 do you already understand — and could say — this sentence?</div>`)
   fbClear()
   if (!S.settings!.noautoplay) playSent(n)
-  setActions(btn('🔊 Replay', undefined, () => playSent(n), 'space'),
-    btn('✅ I know it', 'g-good', () => { S.pqIdx++; pqShow() }, 'enter'),
-    btn('❌ Not yet', 'g-again', pqDone))
+  setActions(btn(I.spk() + ' Replay', undefined, () => playSent(n), 'space'),
+    btn(I.check() + ' I know it', 'g-good', () => { S.pqIdx++; pqShow() }, 'enter'),
+    btn(I.x() + ' Not yet', 'g-again', pqDone))
 }
 function pqDone() {
   const known = S.pqItems.slice(0, S.pqIdx)
@@ -308,7 +311,7 @@ export function renderHome() {
     card.innerHTML = `${FLAG[first.lang || ''] || ''}<h3>${name} ${lang}</h3>
       <div class="dmeta">${ns.length} cards · <b>${newC}</b> new · ${learnC} learning · <b>${revC}</b> reviewing${doneC ? ` · ${doneC} done` : ''}<br>
       ${dueC ? `<b>${dueC} ready now</b> · ` : ''}${sentC} sentence(s) unlocked</div>${desc}
-      <div class="dbtns"><button class="dreset" data-r="${esc(String(d))}">♻ reset</button>
+      <div class="dbtns"><button class="dreset" data-r="${esc(String(d))}">${I.reset()} reset</button>
       ${bundled ? '' : `<button class="dreset dx" data-x="${esc(String(d))}" data-n="${esc(first.deck || String(d))}">🗑 remove</button>`}</div>`
     card.onclick = e => { if ((e.target as HTMLElement).closest('.dreset')) return
       const nsL = S.notes.filter(n => n.deckId === d && sHzHas(n))
@@ -347,9 +350,9 @@ export function idler() {
       goal = `<br><br>🎯 current goal: <b>${esc(act.sMean || act.sHz)}</b><br><span class="hint">${left ? left + ' word(s) in learning steps — auto-resuming when their timer hits' : 'waiting on learning-step timers (≤2 min)'}</span>` }
     $('stage-lbl')!.textContent = 'all caught up'
     setPrompt('<span class="hint">' + (act ? 'Caught up.' : 'No cards due. Import more decks on the home screen.') + goal + '</span>')
-    setActions(...[act ? btn('🛑 Enough for today', 'g-again', showHome) : null,
+    setActions(...[act ? btn(I.pause('#ff3d71') + ' Enough for today', 'g-again', showHome) : null,
       act ? btn('▶ Continue to next sentence', 'primary', skipGateCore, 'enter') : null,
-      act ? btn('📚 Review past sentences', undefined, reviewPast) : null,
+      act ? btn(I.books() + ' Review past sentences', undefined, reviewPast) : null,
       act ? btn('🧪 Placement quiz', undefined, startQuiz) : null,
       btn('🔄 Rebuild queue', undefined, idler)].filter(Boolean as any))
     S.cur = null; statsView()
@@ -430,7 +433,7 @@ export function showSentIntro() {
     <div class="hint">🔊 just listen for now. then we break it down word by word.</div>`)
   fbClear()
   if (!S.settings!.noautoplay) playSent(A)
-  setActions(btn('🔊 Replay sentence', undefined, () => playSent(A), 'space'),
+  setActions(btn(I.spk() + ' Replay sentence', undefined, () => playSent(A), 'space'),
     btn('Break it down →', 'primary', showListen, 'enter'))
 }
 function imgSrcFull(A: Note) {
@@ -442,7 +445,7 @@ export function showListen() {
   setPrompt(fullView(S.cur!) + audioWarn() + `<div class="hint">a piece of your sentence: 🔊 + pinyin + hanzi + meaning</div>`)
   fbClear()
   if (!S.settings!.noautoplay) playAudio(S.cur!)
-  setActions(btn('🔊 Word', undefined, () => playAudio(S.cur!), 'space'),
+  setActions(btn(I.spk() + ' Word', undefined, () => playAudio(S.cur!), 'space'),
     btn('Test me →', 'primary', showWordTest, 'enter'))
 }
 function showWordTest() {
@@ -453,8 +456,8 @@ function showWordTest() {
   $('stage-lbl')!.textContent = 'test — how do you say it?'
   setPrompt(qHtml(m))
   fbClear()
-  setActions(btn('✅ I know it', 'g-next', () => testReveal(true), 'enter'),
-    btn('❌ I don\'t know it', 'g-again', () => testReveal(false)))
+  setActions(btn(I.check() + ' I know it', 'g-next', () => testReveal(true), 'enter'),
+    btn(I.x() + " I don't know it", 'g-again', () => testReveal(false)))
 }
 function removeCard() { if (!S.cur) return
   if (!confirm('Delete "' + (S.cur.hanzi || '') + '" permanently from this deck?')) return
@@ -473,14 +476,14 @@ function suspendCur() { if (!S.cur) return killVoice()
 function pauseSess() { killVoice()
   try { speechSynthesis.cancel() } catch (e) {}
   setPrompt('<div class="hz" style="font-size:34px">⏸ paused</div><div class="hint">session paused — the deck keeps its place.</div>')
-  setActions(btn('▶️ Resume', 'primary', route, 'enter')) }
+  setActions(btn(I.play() + ' Resume', 'primary', route, 'enter')) }
 function testReveal(known: boolean) {
   S.stage = 3
   setPrompt(fullView(S.cur!) + audioWarn() +
     (known ? '<div class="hint">knew it — graded Good, next review pushed out</div>'
            : '<div class="hint">didn\'t know — graded Again, repeats soon</div>'))
   playAudio(S.cur!)
-  setActions(btn('🔊 Replay', undefined, () => playAudio(S.cur!), 'space'),
+  setActions(btn(I.spk() + ' Replay', undefined, () => playAudio(S.cur!), 'space'),
     btn('Continue →', 'primary', () => finish(known ? 2 : 0), 'enter'))
 }
 export function showSentQ() {
@@ -491,8 +494,8 @@ export function showSentQ() {
   $('stage-lbl')!.textContent = 'sentence — first practice'
   setPrompt(qHtml(m) + `<div class="hint">you know every word in it. say the whole sentence aloud.</div>`)
   fbClear()
-  setActions(btn('✅ I know it', 'g-next', () => sentRevealDone(), 'enter'),
-    btn('❌ I don\'t know it', 'g-again', () => showSentFail()))
+  setActions(btn(I.check() + ' I know it', 'g-next', () => sentRevealDone(), 'enter'),
+    btn(I.x() + " I don't know it", 'g-again', () => showSentFail()))
 }
 /* fixed: legacy shipped showSentR calls that crashed — now aliased to sentence reveal */
 function showSentR() { sentRevealDone() }
@@ -516,9 +519,9 @@ export function showSentTest() {
   setPrompt(qHtml(m) + `<div class="hint">hanzi reveals after you answer.</div>`)
   fbClear()
   if (!S.settings!.noautoplay) playSent(S.cur!)
-  setActions(btn('🔊 Replay', undefined, () => playSent(S.cur!), 'space'),
-    btn('✅ I know it', 'g-good', () => { gradeSent(2); sentRevealDone() }, 'enter'),
-    btn('❌ I don\'t know it', 'g-again', () => { gradeSent(0); showSentFail() }))
+  setActions(btn(I.spk() + ' Replay', undefined, () => playSent(S.cur!), 'space'),
+    btn(I.check() + ' I know it', 'g-good', () => { gradeSent(2); sentRevealDone() }, 'enter'),
+    btn(I.x() + " I don't know it", 'g-again', () => { gradeSent(0); showSentFail() }))
 }
 function sentRevealDone() {
   S.stage = 5; statsView()
@@ -526,7 +529,7 @@ function sentRevealDone() {
   const days = sp && sp.due > Date.now() ? Math.max(1, Math.round((sp.due - Date.now()) / 864e5)) : null
   setPrompt(sentView(S.cur!) + `<div class="hint">${days ? `sentence passed — next review in ~${days} day(s)` : 'sentence passed — next review later, Anki-style'}</div>`)
   playSent(S.cur!)
-  setActions(btn('🔊 Replay', undefined, () => playSent(S.cur!), 'space'),
+  setActions(btn(I.spk() + ' Replay', undefined, () => playSent(S.cur!), 'space'),
     btn('Next →', 'primary', advance, 'enter'))
 }
 function showSentFail() {
@@ -548,8 +551,8 @@ function showWordCard(m: Note, back?: () => void) {
   setPrompt(fullView(m) +
     (m.sHz ? `<hr style="border-color:var(--bd);width:100%"><div class="hz" style="font-size:26px">${sentHtml(m)}</div><div class="meaning">${esc(m.sMean)}</div>` : ''))
   playAudio(m)
-  setActions(btn('🔊 Word', undefined, () => playAudio(m), 'space'),
-    m.sSound ? btn('🔊 Its sentence', undefined, () => playSent(m)) : null,
+  setActions(btn(I.spk() + ' Word', undefined, () => playAudio(m), 'space'),
+    m.sSound ? btn(I.spk() + ' Its sentence', undefined, () => playSent(m)) : null,
     btn('← Back', 'primary', back, 'enter'))
 }
 export function showSentRetest() {
@@ -561,9 +564,9 @@ export function showSentRetest() {
   setPrompt(`<div class="hint">one more time — how do you say:</div>
     <div class="meaning" style="font-size:27px;color:#e8edf3">${esc(m)}</div>`)
   fbClear()
-  setActions(btn('✅ I said it', 'g-next', () => { gradeSent(1); sentRevealDone() }, 'enter'),
-    btn('👀 Show me', 'g-hard', () => showSentR()),
-    btn('❌ Still no', 'g-again', () => { gradeSent(0); showSentFail() }))
+  setActions(btn(I.check() + ' I said it', 'g-next', () => { gradeSent(1); sentRevealDone() }, 'enter'),
+    btn(I.eye() + ' Show me', 'g-hard', () => showSentR()),
+    btn(I.x() + ' Still no', 'g-again', () => { gradeSent(0); showSentFail() }))
 }
 function advance() {
   const e = S.queue[0]

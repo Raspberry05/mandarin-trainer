@@ -3,7 +3,7 @@
 import { S, $, esc } from './state'
 import { listenZh, micMeter } from './speech'
 import { speak } from './audio'
-import { promptSet } from './dom'
+import { promptSet, I } from './dom'
 import { renderTop, idler, showHome, saveSettings } from './ui'
 
 let chatTok = 0
@@ -24,10 +24,10 @@ export function chatView(from: 'silent' | 'voice' = 'silent') {
   renderTop()
   if (!S.chatLog.length) S.chatLog.push({ who: 'ai', t: '你好！我们开始聊天吧。(nǐ hǎo! Let\'s chat.)' })
   chatRender()
-  const ms = $('mic-state'); if (ms) { ms.classList.remove('ok'); ms.textContent = 'mic connecting…' }
+  const ms = $('mic-state'); if (ms) { ms.classList.remove('ok'); ms.innerHTML = `${I.mic('#ffb84d')}<span>mic connecting…</span>` }
   micMeter(lvl => { const b = $('mic-bar'); if (b) b.style.width = Math.max(2, Math.min(100, lvl * 130)) + '%' })
-    .then(h => { if (h && tok === chatTok) { S.chatMeter = h; if (ms) { ms.classList.add('ok'); ms.textContent = '🎙 listening · mic connected' } }
-      else if (!h && ms) ms.textContent = '⚠ mic blocked — allow microphone access' })
+    .then(h => { if (h && tok === chatTok) { S.chatMeter = h; if (ms) { ms.classList.add('ok'); ms.innerHTML = `${I.mic('#00e676')}<span>listening · mic connected</span>` } }
+      else if (!h && ms) ms.innerHTML = `${I.mic('#ff3d71')}<span>mic blocked — allow microphone access</span>` })
   chatListen()
 }
 function chatListen() {
