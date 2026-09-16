@@ -14,7 +14,7 @@ export default function Page() {
         <input type="file" id="file-in" accept=".apkg,.colpkg,.txt,.csv" multiple hidden />
         <button id="settings-btn">⚙ Settings</button>
         <button id="reset-card-btn" title="Erase ALL progress for this deck and start over">♻ Reset deck</button>
-        <button id="mode-btn" title="Silent = flashcards · Voice = spoken question, answer with the mic">🎙 Voice mode</button>
+        <button id="mode-btn" title="Flashcard = cards with image & audio · Voice = spoken question, answer with the mic">🎙 Voice mode</button>
         <button id="auth-btn">👤 Sign in / Sign up</button>
       </header>
       <main>
@@ -73,7 +73,7 @@ export default function Page() {
           <div className="row"><label>Show new after reviews</label><input type="checkbox" id="s-newafter" /></div>
           <div className="row"><label>Desired retention (% — scales interval growth)</label><input type="number" id="s-ret" min={80} max={99} /></div>
           <div className="row"><label>Maximum interval (days)</label><input type="number" id="s-maxivl" min={1} max={36500} /></div>
-          <div className="row"><label>Study mode (Silent = flashcards · Voice = mic answers)</label><select id="s-mode"><option value="silent">Silent</option><option value="voice">Voice</option></select></div>
+          <div className="row"><label>Study mode (Flashcard = cards with image & audio · Voice = mic answers)</label><select id="s-mode"><option value="silent">Flashcard</option><option value="voice">Voice</option></select></div>
           <div className="row"><label>Text-to-speech engine</label><select id="s-ttspref"><option value="auto">Auto (best available)</option><option value="local">Device voice</option><option value="google">Google TTS (AI voice)</option><option value="eleven">ElevenLabs (premium AI voice)</option></select></div>
           <div className="row"><label>ElevenLabs API key (for ElevenLabs / all auto Mandarin)</label><input type="text" id="s-elevenKey" placeholder="xi-api-key"></input></div>
           <div className="row"><label>ElevenLabs voice ID (optional)</label><input type="text" id="s-elevenVoice" placeholder="JBFqnCBsd6RMkjVDRZzb"></input></div>

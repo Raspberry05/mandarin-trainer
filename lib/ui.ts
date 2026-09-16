@@ -133,7 +133,16 @@ function voiceTest(target: string, pass: () => void, fail: () => void) {
     setActions(btn('✅ I know it', 'g-next', pass, 'enter'), btn('❌ I don\'t know it', 'g-again', fail))
     return
   }
-  $('prompt')!.innerHTML += '<div id="mic-line" class="hint" style="font-size:19px;min-height:28px"></div><div id="mic-ctl" class="btnrow"></div>'
+  const upNext = () => {
+    if (!voice()) return ''
+    const rows = S.queue.slice(0, 6).map((e, ix) => {
+      const n = 'sentNote' in e ? e.sentNote : e
+      const m = (S.stage === 4 || S.stage === 5 || S.stage === 6 || S.stage === 7) ? (n.sMean || n.sHz) : (n.meaning || n.pinyin)
+      const t = ix === 0 ? '· now' : ''
+      return `<div class="qrow${ix === 0 ? ' now' : ''}"><span class="qn">${ix + 1}</span><span>${esc(m || n.hanzi)}</span>${t ? `<span class="hint">${t}</span>` : ''}</div>` })
+    return rows.length > 1 ? `<div class="qlist"><div class="hint" style="text-align:left">up next</div>${rows.join('')}</div>` : ''
+  }
+  $('prompt')!.innerHTML += '<div id="mic-line" class="hint" style="font-size:19px;min-height:28px"></div><div id="mic-ctl" class="btnrow"></div>' + upNext()
   const line = $('mic-line')!, ctl = $('mic-ctl')!
   const replay = btn('🔊 Replay question', undefined, () => { sayQ() })
   const skip = btn('Skip — show answer', 'g-hard', failX)
@@ -502,7 +511,9 @@ function readSettings() {
 }
 function openSettings() { fillSettings(S.settings!); $('settings-modal')!.classList.add('open') }
 function closeSettings() { readSettings(); statsView(); $('settings-modal')!.classList.remove('open') }
-function applyModeLabel() { const b = $('mode-btn'); if (b) b.textContent = voice() ? '🎙 Voice mode' : '🔇 Silent mode' }
+function applyModeLabel() { const b = $('mode-btn')
+  if (b) b.textContent = voice() ? '🎙 Voice mode' : '🗂 Flashcard mode'
+  if (typeof document !== 'undefined') document.body.classList.toggle('voice-mode', voice()) }
 
 /* ---------- build info ---------- */
 function relTime(t: number) { const s = (Date.now() - t) / 1000

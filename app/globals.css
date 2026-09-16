@@ -63,6 +63,12 @@ main{max-width:1360px;margin:0 auto;padding:24px 20px 90px}
 .hz.hidden-h{filter:blur(12px);user-select:none}
 .meaning{font-size:24px;color:#d6dde6}
 .note-img{max-width:100%;max-height:300px;border-radius:14px;border:1px solid var(--bd);box-shadow:0 6px 24px rgba(0,0,0,.3)}
+/* voice mode: audio-first, images off, vertical question list */
+body.voice-mode .note-img,body.voice-mode .fb-img{display:none}
+.qlist{display:flex;flex-direction:column;gap:6px;margin-top:14px;text-align:left}
+.qlist .qrow{display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--bd);border-radius:10px;color:#9aa7b4;font-size:14px;background:rgba(255,255,255,.02)}
+.qlist .qrow.now{color:#e8edf3;border-color:var(--fg);background:rgba(255,255,255,.06)}
+.qlist .qrow .qn{opacity:.6;font-size:12px;min-width:22px;text-align:right}
 .fb-img{display:flex;align-items:center;justify-content:center;min-height:180px;padding:20px;
   background:linear-gradient(135deg,hsl(var(--h),45%,22%),hsl(var(--h),55%,12%));overflow:hidden}
 .fb-img span{font-size:64px;color:hsl(var(--h),70%,78%);letter-spacing:8px;text-align:center;

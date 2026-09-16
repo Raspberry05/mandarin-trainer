@@ -53,7 +53,7 @@ function gUrl(text: string, lang: string) {
 export function speak(text: string, lang = 'zh-CN', onend?: () => void) {
   if (!text) { onend?.(); return }
   const pref = S.settings?.ttspref || 'auto'
-  const elevenify = !!S.settings?.elevenKey && (pref === 'eleven' || (pref === 'auto' && lang.startsWith('zh')))
+  const elevenify = !!S.settings?.elevenKey && (pref === 'eleven' || pref === 'auto')
   if (elevenify) {
     speakAsync(text, lang, onend); return
   }
