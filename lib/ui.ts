@@ -107,13 +107,29 @@ function startTimer() {
 const qHtml = (m: string) => `<div class="hint">do you know how to say</div>
   <div class="meaning" style="font-size:27px;color:#e8edf3">“${esc(m)}”</div>
   <div class="hint">in Mandarin?</div>`
+/* grammar particles get a natural spoken prompt, not "how do you say 'indicates possession…'" */
+const GRAMMAR_MEANING = /^(indicates?|denotes?|expresses?|marks?|particle|aspect|marker|grammatical|a grammatical|possessive|possessions?|complet\w*|attach\w*|added|adds|adds a|used (for|to|when|with|after|before|as|at|by|in)|shows?)\b/i
+const PARTICLE_HZ = /^(的|了|吗|呢|吧|嘛|呗|啊|呀|哦|嗯|着|过|得|们|之)$/
+function isGrammarNote(n: Note) {
+  const core = (n.hanzi || '').split(/[\/\s]/)[0] || ''
+  return GRAMMAR_MEANING.test((n.meaning || '').trim()) || (core.length <= 2 && PARTICLE_HZ.test(core))
+}
+function naturalAsk(n: Note | null, target: string, sent: boolean) {
+  if (sent || !n || !isGrammarNote(n)) return `Do you know how to say ${target} in Mandarin?`
+  const low = (s: string) => s.charAt(0).toLowerCase() + s.slice(1)
+  const m = (n.meaning || target).trim().replace(/[.。]$/, '')
+  if (/^(particle|aspect|marker|grammatical|a grammatical)/i.test(m)) return `In Mandarin, this is ${low(m)}. Say it out loud.`
+  if (/^(indicates?|denotes?|expresses?|marks?|attach\w*|added|adds|shows?|used |complet\w*|possess\w*)/i.test(m))
+    return `For this one: in Mandarin, it ${low(m)}. Say it out loud.`
+  return `For this one, in Mandarin, it's a little grammar word — it's used for ${target}. Say it out loud.`
+}
 function voice() { return S.settings!.mode === 'voice' }
 let micToken = 0
 function voiceTest(target: string, pass: () => void, fail: () => void) {
   const tok = ++micToken
   const isSent = S.stage === 4 || S.stage === 5 || S.stage === 6
   const sayAnswer = () => { const n = S.cur!; if (isSent) playSent(n); else playAudio(n) }
-  const sayQ = (cb?: () => void) => speak(`Do you know how to say ${target} in Mandarin?`, 'en', cb)
+  const sayQ = (cb?: () => void) => speak(naturalAsk(S.cur, target, isSent), 'en', cb)
   let cmdH: ListenHandle | null = null
   const stopCmd = () => { cmdH?.stop(); cmdH = null }
   const stopCmdAll = () => { stopCmd(); micToken = tok + 1 } // hard exit: voiceTest becomes a no-op

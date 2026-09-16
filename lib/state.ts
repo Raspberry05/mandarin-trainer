@@ -56,7 +56,7 @@ export const S = {
   sentSeen: new Set<string>(),
   pqItems: [] as Note[],
   pqIdx: 0,
-  BUILD_DATE: 1789539746,
+  BUILD_DATE: 1789540231,
 }
 if (!S.settings) { S.settings = { ...DEF }; S.presets = { 'Default': { ...DEF } as Settings }; save(LS.pr, S.presets); save(LS.s, S.settings) }
 if (!S.settings!.mode) S.settings!.mode = 'silent'
