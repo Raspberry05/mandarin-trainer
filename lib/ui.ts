@@ -1,7 +1,7 @@
 "use strict"
 import { S, $, esc, today, diag, rollCounts, pOf, persist, isDue, hskLevel, lessons, liveNotes, activeNote, sentReady, sentComplete, sentWords, sHzHas, load, save, LS, type Note, type Prog, type QItem, type Settings } from './state'
 import { imgSrc, fallbackArt, playAudio, playSent, soundUrl, pickVoice, speak } from './audio'
-import { srSupported, listenZh, listenCmd, parseCommand, similarity, PASS, type ListenHandle, type Cmd } from './speech'
+import { srSupported, listenZh, listenCmd, parseCommand, micMeter, similarity, PASS, type ListenHandle, type MeterHandle, type Cmd } from './speech'
 import { buildQueue, grade, gradeSent } from './srs'
 import { saveAll, loadStored } from './idb'
 import { loadBundled } from './bundled'
@@ -131,8 +131,13 @@ function voiceTest(target: string, pass: () => void, fail: () => void) {
   const sayAnswer = () => { const n = S.cur!; if (isSent) playSent(n); else playAudio(n) }
   const sayQ = (cb?: () => void) => speak(naturalAsk(S.cur, target, isSent), 'en', cb)
   let cmdH: ListenHandle | null = null
-  const stopCmd = () => { cmdH?.stop(); cmdH = null }
-  const stopCmdAll = () => { stopCmd(); micToken = tok + 1 } // hard exit: voiceTest becomes a no-op
+  let meterH: MeterHandle | null = null
+  let cmdGen = 0 // bumping kills any queued cmdLoop re-arm — no dual-listener mic contention
+  const stopCmd = () => { cmdH?.stop(); cmdH = null; cmdGen++ }
+  const startMeter = () => { if (meterH) return
+    micMeter(lvl => { const b = $('mic-bar'); if (b) b.style.width = Math.max(2, Math.min(100, lvl * 130)) + '%' })
+      .then(h => { meterH = h; if (!h && $('mic-bar')) ($('mic-bar-wrap') as HTMLElement).style.opacity = '.35' }) }
+  const stopCmdAll = () => { stopCmd(); meterH?.stop(); meterH = null; micToken = tok + 1 } // hard exit: voiceTest becomes a no-op
   let tries = 0, echo = false
   function onCommand(c: Cmd) {
     if (tok !== micToken) return
@@ -141,7 +146,8 @@ function voiceTest(target: string, pass: () => void, fail: () => void) {
     if (c === 'suspend') { stopCmdAll(); suspendCur(); return }
     if (c === 'pause') { stopCmdAll(); pauseSess(); return } }
   const cmdLoop = () => { if (tok !== micToken || !srSupported()) return
-    setTimeout(() => { if (tok !== micToken) return
+    const g = cmdGen
+    setTimeout(() => { if (g !== cmdGen || tok !== micToken) return
       cmdH = listenCmd(onCommand, () => cmdLoop()) }, 300) }
   const failX = () => { stopCmdAll(); fail() }
   if (!srSupported()) {
@@ -158,8 +164,9 @@ function voiceTest(target: string, pass: () => void, fail: () => void) {
       return `<div class="qrow${ix === 0 ? ' now' : ''}"><span class="qn">${ix + 1}</span><span>${esc(m || n.hanzi)}</span>${t ? `<span class="hint">${t}</span>` : ''}</div>` })
     return rows.length > 1 ? `<div class="qlist"><div class="hint" style="text-align:left">up next</div>${rows.join('')}</div>` : ''
   }
-  $('prompt')!.innerHTML += '<div id="mic-line" class="hint" style="font-size:19px;min-height:28px"></div><div id="mic-ctl" class="btnrow"></div>' + upNext()
+  $('prompt')!.innerHTML += '<div id="mic-line" class="hint" style="font-size:19px;min-height:28px"></div><div id="mic-bar-wrap"><div id="mic-bar"></div></div><div id="mic-ctl" class="btnrow"></div>' + upNext()
   const line = $('mic-line')!, ctl = $('mic-ctl')!
+  startMeter()
   const replay = btn('🔊 Replay question', undefined, () => { sayQ() })
   const arm = () => { if (tok !== micToken) return
     ctl.innerHTML = ''; line.textContent = '🎙 tap Speak now · or say: “pass” · “suspend” · “pause” · “again”'
@@ -170,7 +177,9 @@ function voiceTest(target: string, pass: () => void, fail: () => void) {
     line.textContent = echo ? '🎙 echo it — say the answer out loud' : '🎙 listening… say it in Mandarin'
     ctl.innerHTML = ''; ctl.appendChild(btn('⏸ Pause', 'g-again', () => { h?.stop(); pauseSess() }))
     let h: ListenHandle | null = null
-    h = listenZh(
+    setTimeout(() => { // let the question audio fully finish — mic must not hear the TTS tail
+      if (tok !== micToken) return
+      h = listenZh(
       t => { if (tok === micToken) line.textContent = '🎙 ' + t },
       t => { if (tok !== micToken) return
         const sim = similarity(t, target)
@@ -183,6 +192,7 @@ function voiceTest(target: string, pass: () => void, fail: () => void) {
         else reAttempt(t, sim) },
       e => { if (tok !== micToken) return
         line.textContent = '⚠ ' + e; arm(); cmdLoop() })
+    }, 450)
   }
   const reAttempt = (heard?: string, sim = 0) => {
     if (tok !== micToken) return
@@ -550,8 +560,64 @@ function readSettings() {
 function openSettings() { fillSettings(S.settings!); $('settings-modal')!.classList.add('open') }
 function closeSettings() { readSettings(); statsView(); $('settings-modal')!.classList.remove('open') }
 function applyModeLabel() { const b = $('mode-btn')
-  if (b) b.textContent = voice() ? '🎙 Voice mode' : '🗂 Flashcard mode'
-  if (typeof document !== 'undefined') document.body.classList.toggle('voice-mode', voice()) }
+  const m = S.settings!.mode || 'voice'
+  if (b) b.textContent = m === 'chat' ? '💬 Conversational' : m === 'voice' ? '🎙 Voice mode' : '🗂 Flashcard mode'
+  if (typeof document !== 'undefined') document.body.classList.toggle('voice-mode', m !== 'silent') }
+
+/* ---------- conversational mode: speech-to-speech practice with an AI ---------- */
+let chatTok = 0
+function chatRender() {
+  const log = S.chatLog.map(l => `<div class="qrow ${l.who === 'you' ? 'now' : ''}"><span class="qn">${l.who === 'you' ? '🧑' : '🤖'}</span><span>${esc(l.t)}</span></div>`).join('')
+  $('prompt')!.innerHTML = `<div class="hz" style="font-size:30px">💬 Speak Mandarin with your AI partner</div>
+    <div class="hint">just talk — it listens and replies out loud. Say “pause” to stop.</div>
+    <div id="mic-bar-wrap"><div id="mic-bar"></div></div>
+    <div id="chat-line" class="hint" style="font-size:17px;min-height:26px">🎙 listening…</div>
+    <div class="qlist">${log || ''}</div>`
+}
+function chatView() {
+  const tok = ++chatTok
+  micToken++ // kills study mic loop
+  S.view = 'chat'
+  if (!S.notes.length) { alert('Import a deck first so the AI knows your vocabulary.'); return }
+  if (!S.chatLog.length) S.chatLog.push({ who: 'ai', t: '你好！我们开始聊天吧。(nǐ hǎo! Let\'s chat.)' })
+  chatRender()
+  micMeter(lvl => { const b = $('mic-bar'); if (b) b.style.width = Math.max(2, Math.min(100, lvl * 130)) + '%' })
+    .then(h => { if (h && tok === chatTok) S.chatMeter = h })
+  chatListen()
+}
+function chatListen() {
+  const tok = chatTok
+  listenZh(
+    t => { if (tok === chatTok) { const el = $('chat-line'); if (el) el.textContent = '🎙 ' + t } },
+    t => { if (tok !== chatTok) return
+      if (/\b(pause|stop|quit)\b/i.test(t) && !/[\u4e00-\u9fff]/.test(t)) { chatEnd(); return }
+      S.chatLog.push({ who: 'you', t }); chatSend(t) },
+    () => { if (tok !== chatTok) return
+      const el = $('chat-line'); if (el) el.textContent = '🎙 listening…' 
+      setTimeout(() => { if (tok === chatTok) chatListen() }, 600) })
+}
+async function chatSend(text: string) {
+  const tok = chatTok
+  const el = $('chat-line'); if (el) el.textContent = '🤖 thinking…'
+  try {
+    const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ msgs: S.chatLog.slice(-12).map(l => ({ role: l.who === 'you' ? 'user' : 'assistant', content: l.t })) }) })
+    if (!r.ok) throw new Error(await r.text())
+    const j = await r.json()
+    if (tok !== chatTok) return
+    S.chatLog.push({ who: 'ai', t: j.reply })
+    chatRender()
+    speak(j.reply, 'zh-CN', () => { if (tok === chatTok) chatListen() })
+  } catch (e: any) {
+    if (tok !== chatTok) return
+    if (el) el.textContent = '⚠ ' + (String(e.message || e).includes('501') ? 'set OPENAI_API_KEY in Vercel env for conversational mode' : 'chat failed — retrying')
+    setTimeout(() => { if (tok === chatTok) chatListen() }, 2500) }
+}
+function chatEnd() {
+  const h = S.chatMeter; if (h) { h.stop(); S.chatMeter = null }
+  chatTok++; micToken++; S.view = 'study'
+  idler() }
+
 
 /* ---------- build info ---------- */
 function relTime(t: number) { const s = (Date.now() - t) / 1000
@@ -644,9 +710,12 @@ export function init() {
     if (e.dataTransfer?.files?.length) importFiles([...e.dataTransfer.files as unknown as File[]]) })
   ;($('settings-btn') as HTMLElement)!.onclick = openSettings
   ;($('mode-btn') as HTMLElement)!.onclick = () => {
-    S.settings!.mode = voice() ? 'silent' : 'voice'
+    const cycle: Record<string, 'silent' | 'voice' | 'chat'> = { silent: 'voice', voice: 'chat', chat: 'silent' }
+    S.settings!.mode = cycle[S.settings!.mode || 'voice'] || 'voice'
     saveSettings(); applyModeLabel()
     micToken++ // kill any live mic session
+    if (S.settings!.mode === 'chat') { chatView(); return }
+    if (S.view === 'chat') { S.view = 'study' }
     if (S.view === 'study' && S.cur && (S.stage === 2 || S.stage === 4)) {
       S.stage === 2 ? showWordTest() : showSentTest() } }
   applyModeLabel()

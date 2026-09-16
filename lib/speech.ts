@@ -6,6 +6,30 @@ export const srSupported = () =>
   typeof window !== 'undefined' && !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)
 
 export interface ListenHandle { stop: () => void }
+export interface MeterHandle { stop: () => void }
+
+/* live mic level meter so the user can see the mic is detected and working */
+export async function micMeter(cb: (lvl: number) => void): Promise<MeterHandle | null> {
+  try {
+    const st = await navigator.mediaDevices.getUserMedia({ audio: true })
+    const AC = (window as any).AudioContext || (window as any).webkitAudioContext
+    const ctx = new AC()
+    const src = ctx.createMediaStreamSource(st)
+    const an = ctx.createAnalyser(); an.fftSize = 512
+    src.connect(an)
+    const buf = new Uint8Array(an.frequencyBinCount)
+    let live = true
+    const tick = () => { if (!live) return
+      an.getByteFrequencyData(buf)
+      let sum = 0; for (const v of buf) sum += v
+      cb(Math.min(1, (sum / buf.length) / 60))
+      setTimeout(() => requestAnimationFrame(tick), 60) }
+    tick()
+    return { stop: () => { live = false
+      try { st.getTracks().forEach(t => t.stop()) } catch (e) {}
+      try { ctx.close() } catch (e) {} } }
+  } catch (e) { return null }
+}
 
 export function listenZh(
   onPartial: (t: string) => void,

@@ -69,6 +69,9 @@ body.voice-mode .note-img,body.voice-mode .fb-img{display:none}
 .qlist .qrow{display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--bd);border-radius:10px;color:#9aa7b4;font-size:14px;background:rgba(255,255,255,.02)}
 .qlist .qrow.now{color:#e8edf3;border-color:var(--fg);background:rgba(255,255,255,.06)}
 .qlist .qrow .qn{opacity:.6;font-size:12px;min-width:22px;text-align:right}
+/* live mic level meter */
+#mic-bar-wrap{height:8px;border:1px solid var(--bd);border-radius:6px;margin:8px 0;background:rgba(255,255,255,.05);overflow:hidden}
+#mic-bar{height:100%;width:2%;background:linear-gradient(90deg,#3fb950,#e3b341 70%,#f85149);border-radius:6px;transition:width .06s linear}
 .fb-img{display:flex;align-items:center;justify-content:center;min-height:180px;padding:20px;
   background:linear-gradient(135deg,hsl(var(--h),45%,22%),hsl(var(--h),55%,12%));overflow:hidden}
 .fb-img span{font-size:64px;color:hsl(var(--h),70%,78%);letter-spacing:8px;text-align:center;

@@ -13,7 +13,7 @@ export interface Settings {
   newday: number; maxrev: number; steps: string; relearn: string; leech: number; leechact: string
   noautoplay: boolean; waitaudio: boolean; maxsec: number; newsrt: string; revsrt: string
   newafter: boolean; ret: number; maxivl: number
-  mode?: 'silent' | 'voice'; ttspref?: 'auto' | 'local' | 'google' | 'eleven' | 'openai'
+  mode?: 'silent' | 'voice' | 'chat'; ttspref?: 'auto' | 'local' | 'google' | 'eleven' | 'openai'
   elevenKey?: string; elevenVoice?: string; openaiKey?: string
 }
 export type QItem = Note | { sentNote: Note }
@@ -40,7 +40,7 @@ export const S = {
   cur: null as Note | null,
   stage: 0,
   queue: [] as QItem[],
-  view: 'home' as 'home' | 'study',
+  view: 'home' as 'home' | 'study' | 'chat',
   studyDeck: null as string | null,
   diagLog: [] as string[],
   lastCommit: null as null | { sha: string; t: number },
@@ -56,7 +56,9 @@ export const S = {
   sentSeen: new Set<string>(),
   pqItems: [] as Note[],
   pqIdx: 0,
-  BUILD_DATE: 1789540231,
+  chatLog: [] as { who: 'you' | 'ai'; t: string }[],
+  chatMeter: null as any,
+  BUILD_DATE: 1789540763,
 }
 if (!S.settings) { S.settings = { ...DEF }; S.presets = { 'Default': { ...DEF } as Settings }; save(LS.pr, S.presets); save(LS.s, S.settings) }
 if (!S.settings!.mode) S.settings!.mode = 'silent'
