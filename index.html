@@ -118,7 +118,26 @@ footer{position:fixed;bottom:0;left:0;right:0;background:rgba(20,26,35,.85);back
 .dreset{padding:6px 14px;font-size:13px;border-radius:8px}
 .deckcard .dx{color:#ff7b72}
 .ddesc{color:var(--dim);font-size:12.5px;margin-top:10px;border-top:1px solid var(--bd);padding-top:8px;line-height:1.5}
-@media(max-width:640px){#cardbox{padding:28px 18px}.hz{font-size:52px}.py{font-size:36px}.meaning{font-size:21px}}
+@media(max-width:820px){
+  main{padding:14px 10px 80px}
+  header{flex-wrap:wrap;gap:8px}header h1{font-size:19px}
+  .stats{gap:5px;font-size:12px;margin-bottom:10px}.stats span{padding:5px 9px}
+  #deckbar{margin-bottom:10px}
+  #study-wrap{flex-direction:column-reverse}
+  #curriculum-wrap{flex:none;width:100%;max-height:44vh;overflow-y:auto}
+  .study-main{width:100%}
+  #cardbox{padding:22px 12px;min-height:auto;gap:14px}
+  .hz{font-size:44px}.py{font-size:32px}.meaning{font-size:19px}.fb-img span{font-size:44px}
+  .note-img{max-height:220px}
+  .prompt{font-size:18px}
+  .btnrow{gap:8px}.btnrow button{padding:13px 18px;font-size:16px;min-height:46px}
+  #curriculum{max-height:none}
+  #deck-grid{grid-template-columns:1fr;gap:12px}
+  .deckcard{padding:18px 16px 14px}.flagbar{margin:-18px -16px 10px}
+  #answer-in{font-size:18px;max-width:100%}
+  .stage{font-size:11px;padding:4px 10px}
+}
+@media(max-width:640px){.hz{font-size:52px}.py{font-size:36px}.meaning{font-size:21px}}
 </style>
 </head>
 <body>
