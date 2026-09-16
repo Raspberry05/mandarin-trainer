@@ -37,10 +37,11 @@ export const S = {
   mediaMap: {} as Record<string, string>,   // filename -> blobURL (per import)
   mediaBlobs: {} as Record<string, Blob>,   // filename -> Blob (for IndexedDB persistence)
   decksOn: {} as Record<string, boolean>,
+  levelFilter: {} as Record<string, number | null>, // deckId -> HSK level (null = all levels)
   cur: null as Note | null,
   stage: 0,
   queue: [] as QItem[],
-  view: 'home' as 'home' | 'study' | 'chat',
+  view: 'home' as 'home' | 'deckpage' | 'study' | 'chat',
   studyDeck: null as string | null,
   diagLog: [] as string[],
   lastCommit: null as null | { sha: string; t: number },
@@ -108,8 +109,19 @@ export function parseSteps(s: string): number[] {
 export function mult() { const r = Math.min(99, Math.max(80, +S.settings!.ret || 90)); return 1 + (100 - r) * 0.12 }
 export const sHzHas = (n: Note) => !!(n.sHz || n.sMean)
 
+export function countKey() {
+  const d = String(S.studyDeck || ''); const L = S.levelFilter[d]
+  return L == null ? d : d + ':' + L
+}
+
 /* ---------- curriculum ---------- */
-export const liveNotes = () => S.notes.filter(n => S.decksOn[n.deckId] && !S.progress[n.id]?.leech)
+export function lvlOk(deckId: string | number, n: Note) {
+  const L = S.levelFilter[String(deckId)]
+  return L == null || hskLevel(n) === L
+}
+export function liveNotes() {
+  return S.notes.filter(n => S.decksOn[n.deckId] && !S.progress[n.id]?.leech && lvlOk(n.deckId, n))
+}
 export function lessons() { return liveNotes().filter(n => sHzHas(n))
   .sort((a, b) => (a.k || 0) - (b.k || 0) || (a.id < b.id ? -1 : 1)) }
 export function hskLevel(n: Note) { const k = n.k || 0; return k <= 150 ? 1 : k <= 300 ? 2 : k <= 600 ? 3 : k <= 1200 ? 4 : k <= 2500 ? 5 : 6 }
@@ -128,7 +140,7 @@ export function sentComplete(n: Note) {
   return sentReady(n) || p.skipped
 }
 export function activeNote(): Note | null {
-  const c = S.notes.filter(n => S.decksOn[n.deckId])
+  const c = S.notes.filter(n => S.decksOn[n.deckId] && lvlOk(n.deckId, n))
     .sort((a, b) => (a.k || 0) - (b.k || 0) || (a.id < b.id ? -1 : 1))
   for (const n of c) if (!sentComplete(n)) return n; return null
 }

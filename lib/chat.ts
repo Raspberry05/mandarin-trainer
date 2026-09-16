@@ -4,9 +4,10 @@ import { S, $, esc } from './state'
 import { listenZh, micMeter } from './speech'
 import { speak } from './audio'
 import { promptSet } from './dom'
-import { renderTop, idler, showHome } from './ui'
+import { renderTop, idler, showHome, saveSettings } from './ui'
 
 let chatTok = 0
+let prevMode: 'silent' | 'voice' = 'silent'
 export function killChat() { chatTok++ }
 function chatRender() {
   const log = S.chatLog.map(l => `<div class="qrow ${l.who === 'you' ? 'now' : ''}"><span class="qn">${l.who === 'you' ? '🧑' : '🤖'}</span><span>${esc(l.t)}</span></div>`).join('')
@@ -16,11 +17,11 @@ function chatRender() {
     <div id="chat-line" class="hint" style="font-size:17px;min-height:26px">🎙 listening…</div>
     <div class="qlist">${log || ''}</div>`)
 }
-export function chatView() {
+export function chatView(from: 'silent' | 'voice' = 'silent') {
   const tok = ++chatTok
+  prevMode = from
   S.view = 'chat'
   renderTop()
-  if (!S.notes.length) { alert('Import a deck first so the AI knows your vocabulary.'); showHome(); return }
   if (!S.chatLog.length) S.chatLog.push({ who: 'ai', t: '你好！我们开始聊天吧。(nǐ hǎo! Let\'s chat.)' })
   chatRender()
   const ms = $('mic-state'); if (ms) { ms.classList.remove('ok'); ms.textContent = 'mic connecting…' }
@@ -60,4 +61,6 @@ async function chatSend(text: string) {
 function chatEnd() {
   const h = S.chatMeter; if (h) { h.stop(); S.chatMeter = null }
   chatTok++; S.view = 'study'
+  S.settings!.mode = prevMode // leave conversational — restore the mode we came from
+  saveSettings(); renderTop()
   idler() }

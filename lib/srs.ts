@@ -1,5 +1,5 @@
 "use strict"
-import { S, rollCounts, isDue, pOf, persist, parseSteps, mult, liveNotes, activeNote, sentReady, normHz, hskLevel, levelComplete, type Note, type Prog, type QItem } from './state'
+import { S, rollCounts, isDue, pOf, persist, parseSteps, mult, liveNotes, activeNote, sentReady, normHz, hskLevel, levelComplete, countKey, type Note, type Prog, type QItem } from './state'
 
 /* ---------- queue / schedule ---------- */
 export function buildQueue(): QItem[] {
@@ -14,9 +14,12 @@ export function buildQueue(): QItem[] {
   if (act) {
     const Str = act.sHz || act.sMean
     const words = live.filter(n => n.hanzi && Str.includes(n.hanzi) && (!S.progress[n.id] || S.progress[n.id]!.state === 'new'))
-    if (!words.length && !S.progress['S' + act.id] && sentReady(act)) head = [{ sentNote: act }]
-    else newQ = words.sort((a, b) => (a.k || 0) - (b.k || 0) || (a.id < b.id ? -1 : 1))
-      .slice(0, Math.max(0, Math.min(S.settings!.newday, S.settings!.newday - ((S.counts.n[S.studyDeck || act.deckId]) || 0))))
+    // brand-new lesson: voice mode opens with the sentence question itself; flashcard only when nothing else pending
+    const neverSeen = !S.progress['S' + act.id] && !S.sentSeen.has(act.id)
+    if (neverSeen && (act.sHz || act.sMean) && (S.settings!.mode === 'voice' || !words.length)) head = [{ sentNote: act }]
+    else if (words.length) newQ = words.sort((a, b) => (a.k || 0) - (b.k || 0) || (a.id < b.id ? -1 : 1))
+      .slice(0, Math.max(0, Math.min(S.settings!.newday, S.settings!.newday - ((S.counts.n[countKey()]) || 0))))
+    else if (!S.progress['S' + act.id] && sentReady(act)) head = [{ sentNote: act }]
   }
   let q = S.settings!.newafter ? [...head, ...revN, ...sentDue, ...newQ] : [...head, ...newQ, ...revN, ...sentDue]
   // bury siblings: same hanzi only once per session (sent items keyed separately)
@@ -30,7 +33,7 @@ export function grade(action: number, q: QItem[] = S.queue) {
   const p = pOf(cur.id); const L = parseSteps(S.settings!.steps) || [5, 50, 120]
   const R = parseSteps(S.settings!.relearn) || [5, 50, 120]; const m = mult()
   rollCounts()
-  const dk = cur.deckId
+  const dk = countKey()
   if (p.state === 'new' || p.state === 'learn') {
     if (action === 0) { p.state = 'learn'; p.step = 0; p.due = Date.now() + L[0]! * 1000 }
     else if (action === 1) { p.state = 'learn'; p.due = Date.now() + (L[p.step]! * 1.5) * 1000 }
@@ -65,7 +68,7 @@ export function gradeSent(a: number) {
   const existed = !!S.progress[id]
   const p = S.progress[id] || (S.progress[id] = { state: 'review', step: 0, due: 0, ivl: 2, ease: 2.5 } as Prog)
   if (a !== 0 && !existed) {
-    S.counts.s = S.counts.s || {}; const dk = S.studyDeck || cur.deckId; S.counts.s[dk] = (S.counts.s[dk] || 0) + 1
+    S.counts.s = S.counts.s || {}; const dk = countKey(); S.counts.s[dk] = (S.counts.s[dk] || 0) + 1
     const lvl = hskLevel(cur)
     if (levelComplete(lvl) && !sessionStorage.getItem('hskc' + lvl)) { sessionStorage.setItem('hskc' + lvl, '1')
       setTimeout(() => alert(`🎉 Congratulations — HSK ${lvl} complete! Every sentence in this level is learned.`), 600) }

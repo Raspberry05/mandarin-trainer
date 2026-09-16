@@ -13,7 +13,7 @@ import { SB_URL, SB_KEY } from './config'
 /* ---------- stats ---------- */
 export function statsView() {
   rollCounts()
-  const live = S.notes.filter(n => S.decksOn[n.deckId] && !S.progress[n.id]?.leech)
+  const live = S.notes.filter(n => S.decksOn[n.deckId] && !S.progress[n.id]?.leech && (S.levelFilter[n.deckId] == null || hskLevel(n) === S.levelFilter[n.deckId]))
   const due = live.filter(n => isDue(n.id)).length +
     live.filter(n => { const sp = S.progress['S' + n.id]; return sp && sp.due <= Date.now() }).length
   const newLeft = live.filter(n => !S.progress[n.id]).length
@@ -72,7 +72,57 @@ export function renderRail() {
 /* ---------- view switching ---------- */
 export function showHome() {
   S.view = 'home'; $('home-view')!.style.display = ''; $('study-view')!.style.display = 'none'
+  $('deck-page')!.style.display = 'none'; $('deck-grid')!.style.display = ''
+  $('home-drop')!.style.display = ''; $('import-status')!.style.display = ''
   $('back-btn')!.style.display = 'none'; $('reset-card-btn')!.style.display = 'none'; renderTop(); renderHome()
+}
+/* ---------- deck page: HSK 1–6 sub-deck picker ---------- */
+export function showDeckPage(d: string) {
+  S.view = 'deckpage'; S.studyDeck = d
+  S.decksOn = {}; S.decksOn[d] = true; saveSettings(); S.sentSeen.clear()
+  $('home-view')!.style.display = ''; $('study-view')!.style.display = 'none'
+  $('deck-page')!.style.display = ''; $('deck-grid')!.style.display = 'none'
+  $('home-drop')!.style.display = 'none'; $('import-status')!.style.display = 'none'
+  $('back-btn')!.style.display = ''; $('reset-card-btn')!.style.display = 'none'
+  const ns = S.notes.filter(n => String(n.deckId) === String(d))
+  const name = ns[0]?.deck || String(d)
+  const byL: Record<number, Note[]> = {}
+  ns.forEach(n => { const L = hskLevel(n); (byL[L] = byL[L] || []).push(n) })
+  const lvls = Object.keys(byL).map(Number).sort((a, b) => a - b)
+  const dp = $('deck-page')!
+  dp.innerHTML = `<div class="hz" style="font-size:32px">📚 ${esc(name)}</div>
+    <div class="hint">pick a level — start with HSK 1, or jump straight to where you are.</div>
+    <div id="lvlgrid" class="lvlgrid"></div>`
+  const g = $('lvlgrid')!
+  for (const L of lvls) {
+    const lg = byL[L]!
+    const newC = lg.filter(n => !S.progress[n.id]).length
+    const revC = lg.filter(n => S.progress[n.id]?.state === 'review').length
+    const learnC = lg.length - newC - revC
+    const sentC = lg.filter(n => S.progress['S' + n.id]).length
+    const el = document.createElement('div'); el.className = 'deckcard lvlcard'
+    el.innerHTML = `<h3>HSK ${L}</h3>
+      <div class="dmeta">${lg.length} lessons · <b>${newC}</b> new · ${learnC} learning · <b>${revC}</b> learned<br>
+      ${sentC ? `${sentC} sentence(s) unlocked` : 'nothing unlocked yet'}</div>`
+    el.onclick = () => enterLevel(d, L)
+    g.appendChild(el)
+  }
+  if (lvls.length > 1) {
+    const all = document.createElement('div'); all.className = 'deckcard lvlcard'
+    all.innerHTML = `<h3>All levels</h3><div class="dmeta">${ns.length} cards across every HSK level</div>`
+    all.onclick = () => enterLevel(d, null)
+    g.appendChild(all)
+  }
+  if (!lvls.length) { // deck without sentence content — open directly
+    dp.innerHTML = '<div class="hint">no HSK lessons in this deck — opening it directly.</div>'
+    setTimeout(() => { if (S.view === 'deckpage') enterLevel(d, null) }, 600)
+  }
+}
+export function enterLevel(d: string, L: number | null) {
+  S.levelFilter[String(d)] = L
+  $('deck-page')!.style.display = 'none'; $('deck-grid')!.style.display = ''
+  $('home-drop')!.style.display = ''; $('import-status')!.style.display = ''
+  startDeck(d)
 }
 export function startDeck(d: string) {
   S.view = 'study'; S.studyDeck = d; S.decksOn = {}; S.decksOn[d] = true; saveSettings(); S.sentSeen.clear()
@@ -81,20 +131,17 @@ export function startDeck(d: string) {
   $('back-btn')!.style.display = ''; $('reset-card-btn')!.style.display = ''; statsView()
   renderTop()
   renderDeckbar()
-  if (deckFresh()) placementOffer(); else idler()
-}
-function deckFresh() {
-  const ns = S.notes.filter(n => String(n.deckId) === String(S.studyDeck))
-  return !!ns.length && ns.every(n => !S.progress[n.id])
+  idler()
 }
 
 /* ---------- auracle-style top bar: lesson name · progress · counts · mode pills ---------- */
 export function renderTop() {
   if (typeof document === 'undefined') return
   const b = document.body
-  b.classList.toggle('study', S.view !== 'home')
-  const ns = S.notes.filter(n => String(n.deckId) === String(S.studyDeck))
-  const el = $('cur-lesson'); if (el) el.textContent = ns.length ? (ns[0]!.deck || String(S.studyDeck)) : ''
+  b.classList.toggle('study', S.view === 'study' || S.view === 'chat')
+  const L = S.levelFilter[String(S.studyDeck)]
+  const ns = S.notes.filter(n => String(n.deckId) === String(S.studyDeck) && (L == null || hskLevel(n) === L))
+  const el = $('cur-lesson'); if (el) el.textContent = ns.length ? (ns[0]!.deck || String(S.studyDeck)) + (L != null ? ' — HSK ' + L : '') : ''
   if (ns.length) {
     const learned = ns.filter(n => S.progress[n.id]?.state === 'review').length
     const learning = ns.filter(n => { const s = S.progress[n.id]?.state; return s === 'learn' || s === 'relearn' }).length
@@ -107,6 +154,7 @@ export function renderTop() {
   } else { const tp = $('top-pct'); if (tp) tp.textContent = ''; const ch = $('top-chips'); if (ch) ch.innerHTML = ''; const f = $('top-fill'); if (f) f.style.width = '0%' }
   const m = S.settings!.mode || 'silent'
   b.classList.toggle('mode-silent', m === 'silent')
+  b.classList.toggle('mode-chat', m === 'chat')
   ;['silent', 'voice', 'chat'].forEach(k => { const p = $('mp-' + k); if (p) p.classList.toggle('on', m === k) })
 }
 
@@ -210,7 +258,9 @@ export function renderHome() {
       ${dueC ? `<b>${dueC} ready now</b> · ` : ''}${sentC} sentence(s) unlocked</div>${desc}
       <div class="dbtns"><button class="dreset" data-r="${esc(String(d))}">♻ reset</button>
       ${bundled ? '' : `<button class="dreset dx" data-x="${esc(String(d))}" data-n="${esc(first.deck || String(d))}">🗑 remove</button>`}</div>`
-    card.onclick = e => { if ((e.target as HTMLElement).closest('.dreset')) return; startDeck(d) }
+    card.onclick = e => { if ((e.target as HTMLElement).closest('.dreset')) return
+      const nsL = S.notes.filter(n => n.deckId === d && sHzHas(n))
+      nsL.length ? showDeckPage(String(d)) : startDeck(String(d)) }
     g.appendChild(card)
   }
   const soon = document.createElement('div'); soon.className = 'deckcard soon'
@@ -271,9 +321,15 @@ function route() {
   if (!(S.cur as Note).hanzi) { S.queue.shift(); if (!S.queue.length) { idler(); return } route(); return }
   const isNew = !S.progress[S.cur!.id] || S.progress[S.cur!.id]!.state === 'new'
   if (isNew) {
-    // sentence-first intro is a voice-mode (auracle) flow — flashcard mode goes straight to cards
+    if (voice()) {
+      // voice: skip intros — first ever lesson starts with the question itself ("how do you say …?")
+      const act = activeNote()
+      if (act && sHzHas(act) && !S.sentSeen.has(act.id) && !S.progress['S' + act.id]) {
+        S.sentSeen.add(act.id); S.queue.unshift({ sentNote: act }); return route() }
+      showWordTest(); return }
+    // flashcard: teach first — "today you'll learn to say" intro, then word breakdown
     const act = activeNote()
-    if (voice() && act && sHzHas(act) && !S.sentSeen.has(act.id)) { S.sentSeen.add(act.id); showSentIntro(); return }
+    if (act && sHzHas(act) && !S.sentSeen.has(act.id)) { S.sentSeen.add(act.id); showSentIntro(); return }
     showListen(); return }
   showWordTest()
 }
@@ -557,7 +613,9 @@ async function importFiles(files: File[]) {
 /* ---------- init / wiring ---------- */
 export function init() {
   ;($('import-btn') as HTMLElement)!.onclick = () => ($('file-in') as HTMLElement)!.click()
-  ;($('back-btn') as HTMLElement)!.onclick = showHome as any
+  ;($('back-btn') as HTMLElement)!.onclick = () => {
+    if (S.view === 'study' && S.studyDeck && S.notes.some(n => String(n.deckId) === String(S.studyDeck) && sHzHas(n))) showDeckPage(S.studyDeck)
+    else showHome() }
   ;($('file-in') as HTMLInputElement)!.onchange = e => {
     const files = [...(e.target as HTMLInputElement).files as unknown as File[]]
     ;(e.target as HTMLInputElement).value = ''; importFiles(files) }
@@ -570,10 +628,11 @@ export function init() {
   ;($('settings-btn') as HTMLElement)!.onclick = openSettings
   ;($('mode-btn') as HTMLElement)!.onclick = () => {} // legacy hidden — pills below
   const setMode = (m: 'silent' | 'voice' | 'chat') => {
+    const prev = (S.settings!.mode || 'silent') as 'silent' | 'voice'
     S.settings!.mode = m
     saveSettings(); renderTop()
     killVoice(); import('./chat').then(c => c.killChat()) // kill any live voice/chat session
-    if (m === 'chat') { import('./chat').then(c => c.chatView()); return }
+    if (m === 'chat') { import('./chat').then(c => c.chatView(prev)); return }
     if (S.view === 'study') idler() }
   ;(['silent', 'voice', 'chat'] as const).forEach(k => { const p = $('mp-' + k) as HTMLElement | null; if (p) p.onclick = () => setMode(k) })
   ;($('v-pause') as HTMLElement)!.onclick = () => { killVoice(); import('./chat').then(c => c.killChat()); pauseSess() }
@@ -592,7 +651,9 @@ export function init() {
     const ns = S.notes.filter(n => n.deckId === S.studyDeck)
     if (!confirm(`Reset ALL progress for this deck (${ns.length} cards)? Everything starts over.`)) return
     for (const n of ns) { delete S.progress[n.id]; delete S.progress['S' + n.id] }
-    S.counts.n[S.studyDeck] = 0; S.counts.r[S.studyDeck] = 0; S.counts.s = S.counts.s || {}; S.counts.s[S.studyDeck] = 0
+    const dstr = String(S.studyDeck)
+    S.counts.s = S.counts.s || {}
+    for (const k of [S.counts.n, S.counts.r, S.counts.s]) Object.keys(k).forEach(ck => { if (ck === dstr || ck.startsWith(dstr + ':')) k[ck] = 0 })
     persist(); statsView()
     S.sentSeen.clear(); S.queue = []; idler() }
   ;($('settings-close') as HTMLElement)!.onclick = closeSettings

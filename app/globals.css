@@ -167,6 +167,13 @@ body.study #vbar { display:flex }
 /* flashcard mode: hide mic widgets (bar, prompt meter, listening state) */
 body.mode-silent #mic-state, body.mode-silent #mic-bar-wrap { display:none !important }
 body.mode-silent #mic-bar-wrap { opacity:0 }
+/* conversational mode: pure chat — no curriculum/deckbar/stats/stage chrome */
+body.mode-chat #curriculum-wrap, body.mode-chat #deckbar, body.mode-chat .stats, body.mode-chat #stage-lbl { display:none !important }
+body.mode-chat #cardbox { max-width:720px; margin:0 auto }
+/* deck page: HSK level cards */
+#deck-page { text-align:center; margin:18px auto 0 }
+#deck-page .hz { margin-bottom:6px }
+.lvlgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:16px; margin-top:16px; text-align:left }
 #vbar-btns { margin-left:auto; display:flex; gap:10px }
 #vbar-btns button { min-height:42px; padding:9px 16px }
 /* voice question frame */

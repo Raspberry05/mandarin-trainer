@@ -23,6 +23,7 @@ export default function Page() {
           <div className="hero"><p className="hint" style={{fontSize:'15px'}}>Sentence-first Anki-style lessons. Pick a curriculum below, or import your own deck.</p></div>
           <div id="home-drop">📦 drop .apkg / .txt here — or <button id="import-btn" className="primary">⬆ Import decks</button></div>
           <div id="import-status" className="hint"></div>
+          <div id="deck-page" style={{ display: 'none' }}></div>
           <div id="deck-grid"></div>
         </div>
         <div id="study-view" style={{display:'none'}}>

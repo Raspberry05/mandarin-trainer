@@ -113,6 +113,10 @@ export function voiceTest(target: string, pass: () => void, fail: () => void, io
             ctl.innerHTML = ''; stopCmdAll(); setTimeout(() => { if (tok === micToken) pass() }, 1100) } }
         else reAttempt(t, sim) },
       e => { if (tok !== micToken) return
+        // silence (no-speech / onend-without-match): auto re-listen twice before giving up
+        if (!echo && tries < 2 && /catch anything|no-speech/i.test(String(e))) {
+          tries++; line.textContent = "🎙 didn't catch anything — listening again…"
+          setTimeout(() => { if (tok === micToken) listenOnce() }, 900); return }
         line.textContent = '⚠ ' + e; ctl.innerHTML = ''; ctl.appendChild(replay); cmdLoop() })
     }, 450)
   }
