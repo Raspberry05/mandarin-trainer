@@ -3,7 +3,7 @@
    Self-contained: owns the mic token lifecycle. Study-flow effects (suspend/pause) are injected. */
 import { S, $, esc, type Note } from './state'
 import { playAudio, playSent, speak } from './audio'
-import { srSupported, listenZh, listenCmd, micMeter, recordUtterance, sttEleven, similarity, PASS, type ListenHandle, type MeterHandle, type Cmd } from './speech'
+import { srSupported, listenZh, listenCmd, micMeter, recordUtterance, sttEleven, similarity, parseCommand, PASS, type ListenHandle, type MeterHandle, type Cmd } from './speech'
 import { btn, setActions, promptAppend, promptSet } from './dom'
 
 let micToken = 0
@@ -99,11 +99,15 @@ export function voiceTest(target: string, pass: () => void, fail: () => void, io
     setTimeout(() => { // let the question audio fully finish — mic must not hear the TTS tail
       if (tok !== micToken) return
       h = listenZh(
-      t => { if (tok !== micToken) return // live transcript — show the characters as they're recognized
+      t => { if (tok !== micToken) return // live transcript — voice commands work here too (mic is owned by the zh listener)
+        const pc = parseCommand(t)
+        if (pc) { line.textContent = '⌘ ' + pc + '…'; onCommand(pc); return }
         const hzEl = $('live-hz'); if (hzEl) hzEl.textContent = t
         line.textContent = echo ? '🎙 echo it — say the answer out loud' : '🎙 listening… say it in Mandarin' },
       t => { if (tok !== micToken) return
         noSpeechStreak = 0
+        const pc = parseCommand(t) // zh recognizer often transliterates "Pass please。" — intercept before similarity
+        if (pc) { line.textContent = '⌘ ' + pc + '…'; onCommand(pc); return }
         const sim = similarity(t, target)
         if (sim >= PASS) {
           atts.push({ t, sim, ok: true }); renderAtt()
@@ -117,7 +121,7 @@ export function voiceTest(target: string, pass: () => void, fail: () => void, io
         // silence (no-speech / onend-without-match): auto re-listen twice before giving up
         if (!echo && tries < 2 && /catch anything|no-speech/i.test(String(e))) {
           tries++; noSpeechStreak++; line.textContent = "🎙 didn't catch anything — listening again…"
-          setTimeout(() => { if (tok === micToken) listenOnce() }, 900); return }
+          setTimeout(() => { if (tok === micToken) listenOnce() }, 500); return }
         line.textContent = '⚠ ' + e; cmdLoop() })
     }, 450)
   }
@@ -127,14 +131,16 @@ export function voiceTest(target: string, pass: () => void, fail: () => void, io
       if (tok !== micToken) return
       const blob = await recordUtterance()
       if (tok !== micToken) return
-      if (!blob) { if (!echo && tries < 2) { tries++; line.textContent = "🎙 didn't catch that — recording again…"; setTimeout(() => { if (tok === micToken) elevenOnce() }, 900); return }
+      if (!blob) { if (!echo && tries < 2) { tries++; line.textContent = "🎙 didn't catch that — recording again…"; setTimeout(() => { if (tok === micToken) elevenOnce() }, 500); return }
         line.textContent = '⚠ mic/recorder unavailable'; cmdLoop(); return }
       line.textContent = '🌐 transcribing…'
       const t = await sttEleven(blob)
       if (tok !== micToken) return
-      if (!t) { if (!echo && tries < 2) { tries++; line.textContent = '🌐 transcription empty — recording again…'; setTimeout(() => { if (tok === micToken) elevenOnce() }, 900); return }
+      if (!t) { if (!echo && tries < 2) { tries++; line.textContent = '🌐 transcription empty — recording again…'; setTimeout(() => { if (tok === micToken) elevenOnce() }, 500); return }
         line.textContent = '⚠ transcription failed (stt HTTP error — see diag)'; cmdLoop(); return }
       noSpeechStreak = 0
+      const pc = parseCommand(t) // Scribe sees "Pass please" too — intercept before similarity
+      if (pc) { line.textContent = '⌘ ' + pc + '…'; onCommand(pc); return }
       const hzEl2 = $('live-hz'); if (hzEl2) hzEl2.textContent = t
       const sim = similarity(t, target)
       if (sim >= PASS) {
@@ -144,7 +150,7 @@ export function voiceTest(target: string, pass: () => void, fail: () => void, io
         else { line.innerHTML = `✅ heard: “${esc(t)}” <span class="hint">(${Math.round(sim * 100)}% match)</span>`
           ctl.innerHTML = ''; stopCmdAll(); setTimeout(() => { if (tok === micToken) pass() }, 1100) }
       } else reAttempt(t, sim)
-    }, echo ? 0 : 1450)
+    }, echo ? 0 : 600)
   }
   const reAttempt = (heard?: string, sim = 0) => {
     if (tok !== micToken) return
@@ -153,7 +159,7 @@ export function voiceTest(target: string, pass: () => void, fail: () => void, io
     const label = echo ? 'not quite — one more echo…' : `not quite — I'll ask again (attempt ${tries})`
     line.innerHTML = `❌ “${esc(heard || '')}” <span class="hint">(${Math.round(sim * 100)}% match) — ${label}</span>`
     setTimeout(() => { if (tok !== micToken) return
-      sayQ(() => { if (tok === micToken) listenOnce() }) }, echo ? 900 : 1500)
+      sayQ(() => { if (tok === micToken) listenOnce() }) }, echo ? 500 : 900)
   }
   const auraclePass = () => { // "pass please": show + speak the answer, then re-ask until you echo it correctly
     if (tok !== micToken) return
@@ -164,7 +170,7 @@ export function voiceTest(target: string, pass: () => void, fail: () => void, io
     ctl.innerHTML = ''
     sayAnswer()
     setTimeout(() => { if (tok !== micToken) return
-      sayQ(() => { if (tok === micToken) listenOnce() }) }, 2800)
+      sayQ(() => { if (tok === micToken) listenOnce() }) }, 2200)
   }
   ;($('cmd-susp') as HTMLElement)!.onclick = () => onCommand('suspend')
   ;($('cmd-pass') as HTMLElement)!.onclick = () => onCommand('pass')

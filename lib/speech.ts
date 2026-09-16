@@ -103,8 +103,8 @@ export function similarity(said: string, target: string) {
 export const PASS = 0.75
 
 /* ---------- ElevenLabs Scribe fallback: record an utterance, transcribe server-side ---------- */
-/* records until 1.3s of silence after speech starts, or maxMs; returns the audio blob */
-export async function recordUtterance(maxMs = 7000, silenceMs = 1300): Promise<Blob | null> {
+/* records until 0.8s of silence after speech starts, or maxMs; returns the audio blob */
+export async function recordUtterance(maxMs = 6000, silenceMs = 800): Promise<Blob | null> {
   let st: MediaStream | null = null
   try {
     st = await navigator.mediaDevices.getUserMedia({ audio: true })
