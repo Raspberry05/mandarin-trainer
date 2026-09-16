@@ -5,8 +5,9 @@ export async function GET() {
   const key = process.env.ELEVENLABS_API_KEY
   if (!key) return new Response('ELEVENLABS_API_KEY not configured', { status: 501 })
   const r = await fetch('https://api.elevenlabs.io/v1/voices', { headers: { 'xi-api-key': key } })
-  if (!r.ok) return new Response('upstream ' + r.status, { status: 502 })
-  const j = await r.json()
+  const txt = await r.text()
+  if (!r.ok) return new Response('upstream ' + r.status + ': ' + txt.slice(0, 300), { status: 502 })
+  const j = JSON.parse(txt)
   return Response.json({ voices: (j.voices || []).map((v: any) => ({ id: v.voice_id, name: v.name, labels: v.labels })) })
 }
 
