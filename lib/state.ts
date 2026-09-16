@@ -14,7 +14,7 @@ export interface Settings {
   noautoplay: boolean; waitaudio: boolean; maxsec: number; newsrt: string; revsrt: string
   newafter: boolean; ret: number; maxivl: number
   mode?: 'silent' | 'voice'; ttspref?: 'auto' | 'local' | 'google' | 'eleven'
-  elevenKey?: string; elevenVoice?: string
+  elevenKey?: string; elevenVoice?: string; openaiKey?: string
 }
 export type QItem = Note | { sentNote: Note }
 
@@ -56,7 +56,7 @@ export const S = {
   sentSeen: new Set<string>(),
   pqItems: [] as Note[],
   pqIdx: 0,
-  BUILD_DATE: 1789538700,
+  BUILD_DATE: 1789538955,
 }
 if (!S.settings) { S.settings = { ...DEF }; S.presets = { 'Default': { ...DEF } as Settings }; save(LS.pr, S.presets); save(LS.s, S.settings) }
 if (!S.settings!.mode) S.settings!.mode = 'silent'

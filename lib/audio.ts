@@ -26,6 +26,24 @@ function ttsLocal(text: string, lang: string, rate: number, onend?: () => void) 
 const gCache = new Map<string, string>()
 /* ElevenLabs: best AI voices — needs the user's API key + voice id in settings */
 const eCache = new Map<string, string>()
+/* OpenAI gpt-4o-mini-tts: very fluent, steerable; needs the user's API key in settings */
+const oCache = new Map<string, string>()
+async function openaiUrl(text: string, lang: string): Promise<string | null> {
+  const key = S.settings?.openaiKey || ''
+  if (!key) return null
+  const k = 'o|' + lang + '|' + text
+  let u = oCache.get(k)
+  if (u) return u
+  try {
+    const r = await fetch('https://api.openai.com/v1/audio/speech',
+      { method: 'POST', headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'gpt-4o-mini-tts', voice: 'coral', input: text, response_format: 'mp3',
+          instructions: lang.startsWith('zh') ? 'Speak warm, clear native Mandarin, moderate pace.' : 'Speak warmly, like a friendly tutor.' }) })
+    if (!r.ok) return null
+    const b = await r.blob()
+    u = URL.createObjectURL(b); oCache.set(k, u); return u
+  } catch (e) { return null }
+}
 async function elevenUrl(text: string, lang: string): Promise<string | null> {
   const key = S.settings?.elevenKey || ''
   if (!key) return null
@@ -53,7 +71,7 @@ function gUrl(text: string, lang: string) {
 export function speak(text: string, lang = 'zh-CN', onend?: () => void) {
   if (!text) { onend?.(); return }
   const pref = S.settings?.ttspref || 'auto'
-  const elevenify = !!S.settings?.elevenKey && (pref === 'eleven' || pref === 'auto')
+  const elevenify = !!(S.settings?.elevenKey || S.settings?.openaiKey) && (pref === 'eleven' || pref === 'openai' || pref === 'auto')
   if (elevenify) {
     speakAsync(text, lang, onend); return
   }
@@ -70,9 +88,9 @@ export function speak(text: string, lang = 'zh-CN', onend?: () => void) {
   }
   ttsLocal(text, lang, lang.startsWith('zh') ? 0.9 : 1, onend)
 }
-/* async engine path: ElevenLabs fetch, fallback to local voice */
+/* async engine path: ElevenLabs → OpenAI → local voice */
 function speakAsync(text: string, lang: string, onend?: () => void) {
-  elevenUrl(text, lang).then(u => {
+  elevenUrl(text, lang).then(u => u ? u : openaiUrl(text, lang)).then(u => {
     if (u) { const a = new Audio(u); if (onend) a.onended = () => onend(); a.play().catch(() => ttsLocal(text, lang, 0.9, onend)) }
     else ttsLocal(text, lang, lang.startsWith('zh') ? 0.9 : 1, onend)
   })
