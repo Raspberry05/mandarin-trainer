@@ -36,23 +36,31 @@ export function listenZh(
   onPartial: (t: string) => void,
   onFinal: (t: string) => void,
   onErr: (e: string) => void,
+  opts: { maxMs?: number; matchNow?: (t: string) => boolean | 'match' | 'stop' } = {},
 ): ListenHandle | null {
   const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
   if (!SR) { onErr('speech recognition unsupported here — use Chrome or Edge, or switch to Silent mode'); return null }
   const r = new SR()
   r.lang = 'zh-CN'; r.interimResults = true; r.maxAlternatives = 3; r.continuous = false
-  let got = false
+  let got = false, manual = false
+  /* hard time limit: if nothing understood by maxMs, stop on its own (default 9s) */
+  const timer = setTimeout(() => { if (!got && !manual) { try { r.stop() } catch (e) {} } }, opts.maxMs ?? 9000)
   r.onresult = (e: any) => {
     let interim = '', final = ''
     for (let i = e.resultIndex; i < e.results.length; i++) {
       const t = e.results[i][0].transcript
       if (e.results[i].isFinal) final += t; else interim += t
     }
-    if (interim) onPartial(interim)
-    if (final) { got = true; onFinal(final.trim()) }
+    if (interim) {
+      const res = opts.matchNow?.(interim)
+      if (res === 'stop') { manual = true; clearTimeout(timer); onPartial(interim); try { r.stop() } catch (e2) {}; return }
+      if (res === 'match') { got = true; clearTimeout(timer); try { r.stop() } catch (e2) {}; onFinal(interim.trim()); return }
+      onPartial(interim)
+    }
+    if (final) { got = true; clearTimeout(timer); onFinal(final.trim()) }
   }
   r.onerror = (e: any) => {
-    if (got) return
+    if (got || manual) return
     const map: Record<string, string> = {
       'not-allowed': 'mic blocked — allow microphone access in the browser',
       'service-not-allowed': 'mic blocked by the browser/OS settings',
@@ -62,9 +70,9 @@ export function listenZh(
     }
     onErr(map[e.error] || ('mic error: ' + e.error))
   }
-  r.onend = () => { if (!got) onErr('didn\'t catch anything — try again') }
+  r.onend = () => { clearTimeout(timer); if (!got && !manual) onErr('didn\'t catch anything — try again') }
   try { r.start() } catch (e: any) { onErr('mic start failed: ' + (e.message || e)); return null }
-  return { stop: () => { try { r.stop() } catch (err) {} } }
+  return { stop: () => { manual = true; clearTimeout(timer); try { r.stop() } catch (err) {} } }
 }
 
 /* ---------- English voice commands (armed while the mic is idle) ---------- */

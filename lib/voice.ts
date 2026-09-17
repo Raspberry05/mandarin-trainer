@@ -101,12 +101,18 @@ export function voiceTest(target: string, pass: () => void, fail: () => void, io
     const hzEl = $('live-hz'); if (hzEl) hzEl.textContent = ''
     line.textContent = echo ? '🎙 echo it — say the answer out loud' : '🎙 listening… say it in Mandarin'
     let h: ListenHandle | null = null
+    /* stop-on-detect: a recognized English command stops the listener; a recognized Mandarin
+       target (≥PASS and at least as long as the target) finishes listening right away */
+    const matchNow = (t: string): boolean | 'match' | 'stop' => {
+      const pc = parseCommand(t)
+      if (pc) { line.textContent = '⌘ ' + pc + '…'; onCommand(pc); return 'stop' }
+      if (similarity(t, target) >= PASS && t.trim().length >= target.trim().length) {
+        line.textContent = '✅ detected — finishing…'; return 'match' }
+      return false }
     setTimeout(() => { // let the question audio fully finish — mic must not hear the TTS tail
       if (tok !== micToken) return
       h = listenZh(
-      t => { if (tok !== micToken) return // live transcript — voice commands work here too (mic is owned by the zh listener)
-        const pc = parseCommand(t)
-        if (pc) { line.textContent = '⌘ ' + pc + '…'; onCommand(pc); return }
+      t => { if (tok !== micToken) return // live transcript — shown in real time in #live-hz
         const hzEl = $('live-hz'); if (hzEl) hzEl.textContent = t
         line.textContent = echo ? '🎙 echo it — say the answer out loud' : '🎙 listening… say it in Mandarin' },
       t => { if (tok !== micToken) return
@@ -127,7 +133,8 @@ export function voiceTest(target: string, pass: () => void, fail: () => void, io
         if (!echo && tries < 2 && /catch anything|no-speech/i.test(String(e))) {
           tries++; noSpeechStreak++; line.textContent = "🎙 didn't catch anything — listening again…"
           setTimeout(() => { if (tok === micToken) listenOnce() }, 500); return }
-        line.textContent = '⚠ ' + e; cmdLoop() })
+        line.textContent = '⚠ ' + e; cmdLoop() },
+      { matchNow })
     }, 450)
   }
   const elevenOnce = () => { if (tok !== micToken) return
