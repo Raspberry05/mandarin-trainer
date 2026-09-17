@@ -31,14 +31,30 @@ function ttsLocal(text: string, lang: string, rate: number, onend?: () => void) 
   try { speechSynthesis.cancel() } catch (e) {}
   let done = false
   const fin = () => { if (done) return; done = true; onend?.() }
-  setTimeout(() => { // Chrome drops the utterance if speak() follows cancel() in the same tick
-    const u = new SpeechSynthesisUtterance(text)
-    u.lang = lang; u.rate = rate
-    const v = lang.startsWith('zh') ? pickVoice() : pickEnVoice(); if (v) u.voice = v
-    u.onend = () => fin()
-    speechSynthesis.speak(u)
-    setTimeout(fin, 9000) // safety: onend never fires in some browsers
-  }, 80)
+  /* no Mandarin voice installed? an English device voice would garble the hanzi —
+     run the Mandarin text through Google TTS first, device synth only as last resort */
+  if (lang.startsWith('zh') && !pickVoice()) {
+    try {
+      const a = hold(new Audio(gUrl(text, 'zh-CN')))
+      let started = false
+      const w = setTimeout(() => { if (!started) { try { a.pause() } catch (e) {} ; synth() } }, 3200)
+      a.onended = () => fin()
+      a.onplaying = () => { started = true; clearTimeout(w) }
+      a.play().catch(() => { clearTimeout(w); synth() })
+      return
+    } catch (e) { /* fall through to synth */ }
+  }
+  synth()
+  function synth() {
+    setTimeout(() => { // Chrome drops the utterance if speak() follows cancel() in the same tick
+      const u = new SpeechSynthesisUtterance(text)
+      u.lang = lang; u.rate = rate
+      const v = lang.startsWith('zh') ? pickVoice() : pickEnVoice(); if (v) u.voice = v
+      u.onend = () => fin()
+      speechSynthesis.speak(u)
+      setTimeout(fin, 9000) // safety: onend never fires in some browsers
+    }, 80)
+  }
 }
 const gCache = new Map<string, string>()
 /* keys: user's own key in settings = direct browser call; otherwise /api/tts proxy with server env

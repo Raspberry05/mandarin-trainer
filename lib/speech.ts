@@ -78,11 +78,13 @@ export function listenZh(
 /* ---------- English voice commands (armed while the mic is idle) ---------- */
 export type Cmd = 'pass' | 'suspend' | 'pause' | 'again'
 export function parseCommand(t: string): Cmd | null {
-  const s = (t || '').toLowerCase().replace(/[.!,?]/g, ' ')
-  if (/\b(pass|next please|skip|skip it|show me|show answer|i don't know)\b/.test(s)) return 'pass'
-  if (/\b(suspend|park|bury|park it|bury it|suspend it)\b/.test(s)) return 'suspend'
-  if (/\b(pause|pause it|stop|stop it|hold on|wait)\b/.test(s)) return 'pause'
-  if (/\b(again|repeat|repeat it|repeat please|once more|replay)\b/.test(s)) return 'again'
+  const s = (t || '').toLowerCase().replace(/[.!,?。！？]/g, ' ')
+  /* English words + the zh-CN recognizer's phonetic transliterations of them
+     (zh ASR hears "pass please" as 帕斯普利兹 etc.) — English-only regex would miss them */
+  if (/\b(pass|next please|skip|skip it|show me|show answer|i don't know)\b/.test(s) || /帕斯|普利兹|普利斯/.test(s)) return 'pass'
+  if (/\b(suspend|park|bury|park it|bury it|suspend it)\b/.test(s) || /瑟斯潘|沙斯潘|色斯潘|沙士盘/.test(s)) return 'suspend'
+  if (/\b(pause|pause it|stop|stop it|hold on|wait)\b/.test(s) || /泡司|泡斯|炮斯|泡子/.test(s)) return 'pause'
+  if (/\b(again|repeat|repeat it|repeat please|once more|replay)\b/.test(s) || /阿根|啊根|奥根/.test(s)) return 'again'
   return null
 }
 export function listenCmd(onFinal: (c: Cmd) => void, onErr: () => void): ListenHandle | null {
